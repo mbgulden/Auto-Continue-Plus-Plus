@@ -20,13 +20,14 @@ export class PollingEngine {
         context: vscode.ExtensionContext,
         stateManager: StateManager,
         fileHandler: () => Promise<void>,
-        terminalHandler: () => Promise<void>
+        terminalHandler: () => Promise<void>,
+        cdpHandler: CDPHandler
     ) {
         this._context = context;
         this._stateManager = stateManager;
         this._fileAcceptHandler = fileHandler;
         this._terminalAcceptHandler = terminalHandler;
-        this._cdpHandler = new CDPHandler();
+        this._cdpHandler = cdpHandler;
 
         // Listen for configuration changes to polling speed
         vscode.workspace.onDidChangeConfiguration(e => {

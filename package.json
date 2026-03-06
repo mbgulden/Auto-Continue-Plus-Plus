@@ -101,6 +101,11 @@
                     },
                     "default": [],
                     "description": "List of string keywords or Regex patterns that, if matched in a terminal command, will prevent auto-execution."
+                },
+                "autoContinue.geminiApiKey": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Optional: Your personal Gemini API key to power Swarm Megaprompt Decomposition via Gemini 3.1 Pro."
                 }
             }
         }

@@ -6,17 +6,20 @@ import { StateManager } from '../state/StateManager';
 import { ContextTracker } from './ContextTracker';
 import { LineageManager } from './LineageManager';
 import { AgentContract, ContractManager } from './ContractManager';
+import { CDPHandler } from './CDPHandler';
 
 export class HandoffProtocol {
     private _stateManager: StateManager;
     private _contextTracker: ContextTracker;
     private _contractManager?: ContractManager;
+    private _cdpHandler?: CDPHandler;
     private _isHandingOff: boolean = false;
 
-    constructor(stateManager: StateManager, contextTracker: ContextTracker, contractManager?: ContractManager) {
+    constructor(stateManager: StateManager, contextTracker: ContextTracker, contractManager?: ContractManager, cdpHandler?: CDPHandler) {
         this._stateManager = stateManager;
         this._contextTracker = contextTracker;
         this._contractManager = contractManager;
+        this._cdpHandler = cdpHandler;
     }
 
     /**
@@ -154,6 +157,20 @@ export class HandoffProtocol {
             await new Promise(resolve => setTimeout(resolve, 500));
             await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
 
+            // --- FULL AUTOMATION: Auto-submit the pasted chat prompt ---
+            if (this._cdpHandler) {
+                await new Promise(resolve => setTimeout(resolve, 500)); // Wait for paste to register in DOM
+                const submitScript = `
+                    (function() {
+                        const textarea = document.querySelector('textarea');
+                        if (textarea) {
+                            textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                        }
+                    })();
+                `;
+                await this._cdpHandler.executeGlobalScript(submitScript);
+            }
+
             // Update State Tracking for Dashboard Visuals
             this._stateManager.incrementStat('handoffs');
             this._contextTracker.resetContext();
@@ -206,6 +223,20 @@ export class HandoffProtocol {
             try { await vscode.commands.executeCommand('antigravity.focus'); } catch (e) { /* ignore */ }
             await new Promise(resolve => setTimeout(resolve, 500));
             await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+
+            // --- FULL AUTOMATION: Auto-submit the propagated Swarm Worker Contract ---
+            if (this._cdpHandler) {
+                await new Promise(resolve => setTimeout(resolve, 500)); // Wait for paste to register in DOM
+                const submitScript = `
+                    (function() {
+                        const textarea = document.querySelector('textarea');
+                        if (textarea) {
+                            textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                        }
+                    })();
+                `;
+                await this._cdpHandler.executeGlobalScript(submitScript);
+            }
 
         } catch (e: any) {
             console.error('[Auto-Continue Swarm] Delegate Spawn Failed', e);

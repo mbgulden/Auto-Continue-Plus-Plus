@@ -85,6 +85,21 @@ export class CDPHandler {
         this._connections.clear();
     }
 
+    /**
+     * Executes a script across all currently connected CDP injection targets.
+     * Useful for broadcasting events like triggering submit button clicks.
+     */
+    public async executeGlobalScript(script: string): Promise<void> {
+        if (!this._isEnabled) return;
+        const promises: Promise<any>[] = [];
+        for (const [id, conn] of this._connections) {
+            promises.push(this._evaluate(id, script).catch(e => {
+                console.log(`[Auto-Continue CDP] Global script fail on ${id}:`, e);
+            }));
+        }
+        await Promise.all(promises);
+    }
+
     private async _getPages(port: number): Promise<any[]> {
         return new Promise((resolve) => {
             const req = http.get({ hostname: '127.0.0.1', port, path: '/json/list', timeout: 500 }, (res) => {

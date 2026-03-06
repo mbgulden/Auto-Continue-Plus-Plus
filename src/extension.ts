@@ -11,6 +11,8 @@ import { SyncEngine } from './engine/SyncEngine';
 import { SwarmLockManager } from './engine/SwarmLockManager';
 import { ContractManager } from './engine/ContractManager';
 import { SwarmOrchestrator } from './engine/SwarmOrchestrator';
+import { CDPHandler } from './engine/CDPHandler';
+import { SwarmWebview } from './ui/SwarmWebview';
 
 /**
  * Validates the Global Terms of Service at extension startup.
@@ -55,6 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const banList = new BanList();
     const contextTracker = new ContextTracker(stateManager);
     const syncEngine = new SyncEngine(context);
+    const cdpHandler = new CDPHandler();
 
     // Initialize UI Features
     const statusBar = new StatusBar(context, stateManager);
@@ -62,7 +65,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const lockManager = new SwarmLockManager();
     const contractManager = new ContractManager();
-    const handoffProtocol = new HandoffProtocol(stateManager, contextTracker, contractManager);
+    const handoffProtocol = new HandoffProtocol(stateManager, contextTracker, contractManager, cdpHandler);
     const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager);
 
     // Recovery Protocol for Stuck Agents
@@ -213,7 +216,7 @@ export async function activate(context: vscode.ExtensionContext) {
     };
 
     // Initialize Core Engine
-    const pollingEngine = new PollingEngine(context, stateManager, handleFileAccept, handleTerminalAccept);
+    const pollingEngine = new PollingEngine(context, stateManager, handleFileAccept, handleTerminalAccept, cdpHandler);
 
     // Bind the context health check directly to the polling interval
     pollingEngine.setContextHealthCheck(async () => {
@@ -260,13 +263,11 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     const spawnSwarmCommand = vscode.commands.registerCommand('auto-continue.swarm.spawnDelegates', async () => {
-        const prompt = await vscode.window.showInputBox({
-            prompt: 'Enter Megaprompt for the Swarm to split (Format: "Agent [Name]: [Task] Paths: src/")',
-            placeHolder: 'Agent Frontend: Update UI. Paths: src/\\nAgent Backend: Update DB. Paths: src/'
-        });
-        if (prompt) {
-            await swarmOrchestrator.spawnDelegates(prompt);
+        if (!context.globalState.get('autoContinue.globalTOSAgreed', false)) {
+            vscode.window.showErrorMessage('You must agree to the Terms of Service to use the Swarm.');
+            return;
         }
+        SwarmWebview.createOrShow(swarmOrchestrator);
     });
 
     context.subscriptions.push(
@@ -278,6 +279,17 @@ export async function activate(context: vscode.ExtensionContext) {
         statusBar,
         contextTracker,
         { dispose: () => lockManager.dispose() }
+    );
+
+    // Provide an Audit Trail / Hard Enforcement for Swarm Locks
+    context.subscriptions.push(
+        vscode.workspace.onWillSaveTextDocument(e => {
+            if (stateManager.isActive && lockManager.isLocked(e.document.uri.fsPath)) {
+                const owner = lockManager.getLockOwner(e.document.uri.fsPath);
+                // We use showWarningMessage to create an audit trail toast without crashing VS Code
+                vscode.window.showWarningMessage(`[Swarm Lock Violation] File ${e.document.fileName} is currently CHECKED OUT by Worker Agent: ${owner}. Concurrent edits may cause data loss!`);
+            }
+        })
     );
 
     // If enabled on startup AND agreed to TOS, start engines immediately

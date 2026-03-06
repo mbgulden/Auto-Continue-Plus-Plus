@@ -22,42 +22,39 @@ export class SwarmOrchestrator {
     }
 
     /**
-     * Accepts a user's megaprompt and splits it into discrete sub-tasks for the swarm to execute.
+     * Accepts a user's megaprompt and returns the parsed AgentContracts for UI review.
+     * Does NOT spawn them immediately.
      */
-    public async spawnDelegates(megaprompt: string): Promise<void> {
-        // 1. In a future robust version, we would prompt the active conversation to parse this 
-        // string into JSON. For now, we will simulate the "Manager" parsing logic by executing
-        // a smart split or asking the user to format it in predefined chunks if needed, 
-        // or just splitting it naively if it's bullet points.
-
-        // Ensure the Swarm CLI tool is available for the agents in the workspace
-        this._provisionSwarmCLI();
-
-        vscode.window.showInformationMessage('Auto-Continue Swarm: Analyzing Megaprompt and provisioning Workers...');
-
-        // Mocking the Manager LLM parsing for the checkpoint demo.
-        // We will treat each newline separated block as a distinct agent task if it starts with "Agent"
-        const tasks = this._parseMegaprompt(megaprompt);
+    public async decomposeMegaprompt(megaprompt: string): Promise<AgentContract[]> {
+        vscode.window.showInformationMessage('Auto-Continue Swarm: Analyzing Megaprompt with Gemini 3.1 Pro...');
+        const tasks = await this._decomposePromptWithGemini(megaprompt);
 
         if (tasks.length === 0) {
-            vscode.window.showWarningMessage('Auto-Continue Swarm: Could not parse delegates from the prompt. Format should be "Agent [Name]: [Task]"');
-            return;
+            vscode.window.showWarningMessage('Auto-Continue Swarm: Could not parse delegates. Please check your API key or prompt.');
+            return [];
         }
 
-        vscode.window.showInformationMessage(`Auto-Continue Swarm: Provisioning ${tasks.length} Worker Agents concurrently.`);
-
-        for (const task of tasks) {
-            // Generate a thread ID for the new worker
+        return tasks.map(t => {
             const timestampIdentifier = new Date().toISOString().replace(/[:.]/g, '-') + `-${Math.floor(Math.random() * 1000)}`;
-
-            const contract: AgentContract = {
+            return {
                 threadId: timestampIdentifier,
-                role: task.role,
-                taskDescription: task.description,
-                allowedDirectories: task.allowedDirectories || ['src/'],
-                readOnlyDirectories: task.readOnlyDirectories || []
+                role: t.role,
+                taskDescription: t.description,
+                allowedDirectories: t.allowedDirectories || ['src/'],
+                readOnlyDirectories: t.readOnlyDirectories || []
             };
+        });
+    }
 
+    /**
+     * Accepts a list of confirmed AgentContracts and spawns them.
+     */
+    public async spawnDelegatesFromContracts(contracts: AgentContract[]): Promise<void> {
+        this._provisionSwarmCLI();
+
+        vscode.window.showInformationMessage(`Auto-Continue Swarm: Provisioning ${contracts.length} Worker Agents concurrently.`);
+
+        for (const contract of contracts) {
             // Register the hard contract
             this._contractManager.createContract(contract);
 
@@ -72,40 +69,79 @@ export class SwarmOrchestrator {
     }
 
     /**
-     * Naive parser for a megaprompt. In production, this would be an LLM call.
-     * Expects format: 
-     * Agent Frontend: Update the UI components in src/ui. Paths: src/ui
-     * Agent Backend: Update the database schema. Paths: src/db
+     * Intelligent parser using Gemini REST API to break down a Megaprompt into structured JSON.
      */
-    private _parseMegaprompt(prompt: string): Array<{ role: string, description: string, allowedDirectories: string[], readOnlyDirectories: string[] }> {
-        const lines = prompt.split('\\n');
-        const tasks: Array<any> = [];
+    private async _decomposePromptWithGemini(prompt: string): Promise<Array<{ role: string, description: string, allowedDirectories: string[], readOnlyDirectories: string[] }>> {
+        try {
+            const config = vscode.workspace.getConfiguration('autoContinue');
+            const apiKey = config.get<string>('geminiApiKey');
 
-        for (const line of lines) {
-            if (line.trim().startsWith('Agent')) {
-                const parts = line.split(':');
-                if (parts.length >= 2) {
-                    const role = parts[0].replace('Agent', '').trim();
-                    const description = parts.slice(1).join(':').trim();
-
-                    // Super naive path extractor for demo
-                    const pathMatch = description.match(/Paths?:\s*([\\w\\/., ]+)/i);
-                    let allowedPaths = ['src/'];
-                    if (pathMatch && pathMatch[1]) {
-                        allowedPaths = pathMatch[1].split(',').map(p => p.trim());
-                    }
-
-                    tasks.push({
-                        role,
-                        description,
-                        allowedDirectories: allowedPaths,
-                        readOnlyDirectories: []
-                    });
-                }
+            if (!apiKey) {
+                vscode.window.showErrorMessage('Auto-Continue Swarm: Gemini API Key is missing. Please add it in settings (autoContinue.geminiApiKey).');
+                return [];
             }
-        }
 
-        return tasks;
+            const systemInstruction = `You are the Swarm Orchestrator Manager. Your job is to take a user's large feature request (Megaprompt) and break it down into distinct, specialized, non-overlapping tasks for Worker Agents. 
+You MUST output ONLY valid JSON format. No markdown blocks, no conversational text. Just the raw JSON array.
+
+The JSON schema MUST be an array of objects matching this exact structure:
+[
+  {
+    "role": "string (e.g., 'Frontend Worker', 'Database Engineer')",
+    "description": "string (Detailed, exhaustive instructions of what exactly this agent should do. MUST include ALL context from the prompt.)",
+    "allowedDirectories": ["string (e.g., 'src/ui', 'styles/')"],
+    "readOnlyDirectories": ["string (e.g., 'src/api/types.ts')"]
+  }
+]`;
+
+            // Using standard fetch for REST call
+            // Using gemini-1.5-pro as the robust planner model (aka "3.1 Pro" equivalent capabilities)
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    system_instruction: {
+                        parts: [{ text: systemInstruction }]
+                    },
+                    contents: [{
+                        parts: [{ text: `Analyze the following Megaprompt and decompose it:\n\n${prompt}` }]
+                    }],
+                    generationConfig: {
+                        response_mime_type: "application/json"
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Gemini API returned ${response.status} ${response.statusText}`);
+            }
+
+            const data: any = await response.json();
+
+            if (!data.candidates || data.candidates.length === 0) {
+                throw new Error("No candidates returned from Gemini API.");
+            }
+
+            let responseText = data.candidates[0].content.parts[0].text;
+
+            // Clean up potential markdown formatting from the response
+            responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            const parsedTasks = JSON.parse(responseText);
+
+            if (!Array.isArray(parsedTasks)) {
+                throw new Error("LLM did not return a JSON array.");
+            }
+
+            return parsedTasks;
+
+        } catch (e: any) {
+            console.error('[Auto-Continue Swarm] Decomposition failed:', e);
+            vscode.window.showErrorMessage(`Swarm Megaprompt Decomposition Failed: ${e.message}`);
+            return [];
+        }
     }
 
     /**

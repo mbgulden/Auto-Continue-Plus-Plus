@@ -1,0 +1,66 @@
+{
+    "name": "auto-continue-plus-plus",
+    "displayName": "Auto-Continue Plus Plus",
+    "description": "Advanced Auto-Accept Agent with Multi-Tab and Recovery features.",
+    "version": "1.0.0",
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "auto-continue.toggle",
+                "title": "Auto-Continue: Toggle Active"
+            },
+            {
+                "command": "auto-continue.settings",
+                "title": "Auto-Continue: Open Settings"
+            }
+        ],
+        "configuration": {
+            "title": "Auto-Continue Plus Plus",
+            "properties": {
+                "autoContinue.pollingSpeed": {
+                    "type": "integer",
+                    "default": 2000,
+                    "description": "Polling interval in milliseconds for the Auto-Accept loop.",
+                    "minimum": 500
+                },
+                "autoContinue.watchdogTimeoutSeconds": {
+                    "type": "integer",
+                    "default": 60,
+                    "description": "Seconds of inactivity before the Watchdog initiates a Stuck Agent recovery."
+                },
+                "autoContinue.bannedCommands": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [],
+                    "description": "List of string keywords or Regex patterns that, if matched in a terminal command, will prevent auto-execution."
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run build",
+        "compile": "tsc -noEmit",
+        "watch": "node esbuild.config.mjs --watch",
+        "package": "node esbuild.config.mjs --production",
+        "build": "node esbuild.config.mjs --production",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.85.0",
+        "@types/node": "^20.10.0",
+        "typescript": "^5.3.3",
+        "esbuild": "^0.20.0"
+    }
+}

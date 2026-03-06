@@ -31,6 +31,7 @@ async function main() {
         bundle: true,
         format: 'cjs',
         minify: production,
+        drop: production ? ['console'] : [],
         sourcemap: !production,
         sourcesContent: false,
         platform: 'node',

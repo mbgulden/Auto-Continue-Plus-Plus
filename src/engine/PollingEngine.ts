@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import { StateManager } from '../state/StateManager';
+import { CDPHandler } from './CDPHandler';
 
 export class PollingEngine {
     private _stateManager: StateManager;
     private _intervalId: NodeJS.Timeout | null = null;
+    private _cdpHandler: CDPHandler;
+    private _context: vscode.ExtensionContext;
 
     // Default interval in ms
     private _currentInterval: number = 2000;
@@ -11,15 +14,19 @@ export class PollingEngine {
     // Handlers for specific auto-accept tasks
     private _fileAcceptHandler: () => Promise<void>;
     private _terminalAcceptHandler: () => Promise<void>;
+    private _contextHealthCheck?: () => Promise<void>;
 
     constructor(
+        context: vscode.ExtensionContext,
         stateManager: StateManager,
         fileHandler: () => Promise<void>,
         terminalHandler: () => Promise<void>
     ) {
+        this._context = context;
         this._stateManager = stateManager;
         this._fileAcceptHandler = fileHandler;
         this._terminalAcceptHandler = terminalHandler;
+        this._cdpHandler = new CDPHandler();
 
         // Listen for configuration changes to polling speed
         vscode.workspace.onDidChangeConfiguration(e => {
@@ -29,6 +36,13 @@ export class PollingEngine {
         });
 
         this.updateIntervalSpeed();
+    }
+
+    /**
+     * Inject an optional context health check that runs every interval
+     */
+    public setContextHealthCheck(checker: () => Promise<void>) {
+        this._contextHealthCheck = checker;
     }
 
     /**
@@ -56,6 +70,10 @@ export class PollingEngine {
         }
 
         console.log(`[Auto-Continue] Starting polling engine at ${this._currentInterval}ms`);
+
+        // Start CDP session injection for DOM Scraping Antigravity Auto-Accept
+        this._cdpHandler.start(this._context).catch(e => console.error("[Auto-Continue CDP] Start failed:", e));
+
         this._intervalId = setInterval(async () => {
             // Fast fail if not active
             if (!this._stateManager.isActive) {
@@ -76,6 +94,9 @@ export class PollingEngine {
             clearInterval(this._intervalId);
             this._intervalId = null;
             console.log(`[Auto-Continue] Polling engine stopped.`);
+
+            // Stop CDP websockets
+            this._cdpHandler.stop().catch(e => console.error("[Auto-Continue CDP] Stop failed:", e));
         }
     }
 
@@ -84,6 +105,11 @@ export class PollingEngine {
      */
     private async runLoop() {
         try {
+            // 0. Supervisor: Check if context handoff needs to happen
+            if (this._contextHealthCheck) {
+                await this._contextHealthCheck();
+            }
+
             // 1. Check for pending file diffs / apply
             await this._fileAcceptHandler();
 

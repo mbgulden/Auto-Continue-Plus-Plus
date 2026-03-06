@@ -111,18 +111,33 @@ export class HandoffProtocol {
 
             const overridePrompt = `[SYSTEM OVERRIDE] Your context window limit has been reached. Stop your current task immediately. You must summarize all completed work, current state, remaining tasks, and required file paths. YOU MUST SAVE THIS SUMMARY using your file-writing tools to a new file named \`${uniqueFilename}\` in the root of the workspace. Do not output the summary in chat, save it to the file.`;
 
-            await vscode.env.clipboard.writeText(overridePrompt);
-
-            // Blocking Modal to prevent Keyboard/Clipboard Race Conditions
-            await vscode.window.showWarningMessage(
-                "HANDS OFF KEYBOARD: Initiating Handoff\n\nPlease do not type or click while the AI context is switching. Click OK to proceed.",
-                { modal: true },
-                "OK"
-            );
+            // Non-blocking Toast instead of {modal:true}
+            vscode.window.showWarningMessage("Auto-Continue Handoff Initiated. Please wait for the AI to summarize its state...");
 
             try { await vscode.commands.executeCommand('antigravity.focus'); } catch (e) { /* ignore */ }
             await new Promise(resolve => setTimeout(resolve, 500));
-            await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+
+            // Phase 1 Injection: Directly set the DOM value via WebSocket CDP to avoid the clipboard
+            if (this._cdpHandler) {
+                const injectScript = `
+                    (function() {
+                        const textarea = document.querySelector('textarea');
+                        if (textarea) {
+                            // Because React tracks the internal value, we must emulate native input
+                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                            nativeInputValueSetter.call(textarea, ${JSON.stringify(overridePrompt)});
+                            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            // Emulate Enter key
+                            textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                        }
+                    })();
+                `;
+                await this._cdpHandler.executeGlobalScript(injectScript);
+            } else {
+                await vscode.env.clipboard.writeText(overridePrompt);
+                await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+            }
 
             // Poll for the unique handoff file creation using native FileSystemWatcher
             await this.waitForFile(rootPath, uniqueFilename, 120000);
@@ -151,24 +166,29 @@ export class HandoffProtocol {
 
             const scopingPrompt = this.getOpenTabsScope();
             const newThreadPrompt = `[SYSTEM HANDOFF START] Resume work based on the following context summary from your previous session (Legacy Context ID: ${timestampIdentifier}):\n\n${summaryText}${scopingPrompt}\n\n[SYSTEM HANDOFF END] Please confirm you understand the context and outline your immediate next steps.`;
-            await vscode.env.clipboard.writeText(newThreadPrompt);
 
             try { await vscode.commands.executeCommand('antigravity.focus'); } catch (e) { /* ignore */ }
             await new Promise(resolve => setTimeout(resolve, 500));
-            await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
 
-            // --- FULL AUTOMATION: Auto-submit the pasted chat prompt ---
+            // --- FULL AUTOMATION: Direct CDP Injection ---
             if (this._cdpHandler) {
-                await new Promise(resolve => setTimeout(resolve, 500)); // Wait for paste to register in DOM
-                const submitScript = `
+                const injectScript = `
                     (function() {
                         const textarea = document.querySelector('textarea');
                         if (textarea) {
+                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                            nativeInputValueSetter.call(textarea, ${JSON.stringify(newThreadPrompt)});
+                            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            // Emulate Enter key
                             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
                         }
                     })();
                 `;
-                await this._cdpHandler.executeGlobalScript(submitScript);
+                await this._cdpHandler.executeGlobalScript(injectScript);
+            } else {
+                await vscode.env.clipboard.writeText(newThreadPrompt);
+                await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
             }
 
             // Update State Tracking for Dashboard Visuals
@@ -217,25 +237,28 @@ export class HandoffProtocol {
 
             const newThreadPrompt = `${contractPrompt}\n\n[SYSTEM] Please acknowledge your Worker Contract and state your immediate first step. You MUST use your assigned tools to begin work immediately.`;
 
-            await vscode.env.clipboard.writeText(newThreadPrompt);
-
-            // 4. Force focus and paste into the new Antigravity prompt box
             try { await vscode.commands.executeCommand('antigravity.focus'); } catch (e) { /* ignore */ }
             await new Promise(resolve => setTimeout(resolve, 500));
-            await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
 
-            // --- FULL AUTOMATION: Auto-submit the propagated Swarm Worker Contract ---
+            // --- FULL AUTOMATION: Direct Swarm Spawn Injection ---
             if (this._cdpHandler) {
-                await new Promise(resolve => setTimeout(resolve, 500)); // Wait for paste to register in DOM
-                const submitScript = `
+                const injectScript = `
                     (function() {
                         const textarea = document.querySelector('textarea');
                         if (textarea) {
+                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                            nativeInputValueSetter.call(textarea, ${JSON.stringify(newThreadPrompt)});
+                            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            // Emulate Enter key
                             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
                         }
                     })();
                 `;
-                await this._cdpHandler.executeGlobalScript(submitScript);
+                await this._cdpHandler.executeGlobalScript(injectScript);
+            } else {
+                await vscode.env.clipboard.writeText(newThreadPrompt);
+                await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
             }
 
         } catch (e: any) {

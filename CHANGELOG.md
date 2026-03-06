@@ -4,6 +4,12 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.1] - 2026-03-06
+
+### Fixed
+- Fixed issue displaying over 200MB of `.vsix` binaries tracked in local commit history preventing deployment.
+- Hardened `.vscodeignore` and `.gitignore` file rules for future safe publishing.
+
 ## [1.1.0] - 2026-03-06
 
 ### Added

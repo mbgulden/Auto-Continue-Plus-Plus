@@ -3,6 +3,7 @@
     "displayName": "Auto-Continue Plus Plus",
     "description": "Advanced Auto-Accept Agent with Multi-Tab and Recovery features.",
     "version": "1.0.0",
+    "icon": "images/icon.png",
     "engines": {
         "vscode": "^1.85.0"
     },
@@ -22,6 +23,10 @@
             {
                 "command": "auto-continue.settings",
                 "title": "Auto-Continue: Open Settings"
+            },
+            {
+                "command": "auto-continue.dashboard",
+                "title": "Auto-Continue: View Lineage Dashboard"
             }
         ],
         "configuration": {
@@ -37,6 +42,11 @@
                     "type": "integer",
                     "default": 60,
                     "description": "Seconds of inactivity before the Watchdog initiates a Stuck Agent recovery."
+                },
+                "autoContinue.maxTokenLimit": {
+                    "type": "integer",
+                    "default": 120000,
+                    "description": "The exact maximum token size of your LLM Context Window (e.g. 120000 for Claude 3 Sonnet)."
                 },
                 "autoContinue.bannedCommands": {
                     "type": "array",
@@ -56,6 +66,9 @@
         "package": "node esbuild.config.mjs --production",
         "build": "node esbuild.config.mjs --production",
         "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "tiktoken": "^1.0.14"
     },
     "devDependencies": {
         "@types/vscode": "^1.85.0",

@@ -4,6 +4,10 @@
     "description": "Advanced Auto-Accept Agent with Multi-Tab and Recovery features.",
     "version": "1.0.0",
     "icon": "images/icon.png",
+    "galleryBanner": {
+        "color": "#1e1e1e",
+        "theme": "dark"
+    },
     "engines": {
         "vscode": "^1.85.0"
     },

@@ -53,6 +53,12 @@ Customize the agent's behavior directly from your VS Code settings.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## ☕ Fund the AI Compute Addiction
+
+Creating tools to endlessly feed AI agents requires... well, endless compute! If **Auto-Continue Plus Plus** has saved your fingers from repetitive strain injury or saved you hours of manual clicking, consider fueling my AI addiction:
+
+[![Fund the Compute Addiction](https://img.shields.io/badge/Fund_My_Compute_Addiction-%23635BFF.svg?logo=stripe&logoColor=white)](https://buy.stripe.com/14A8wQ3ypbB2cC27lAd3i05)
+
 ## 🤝 Support & Feedback
 
 Encountered an issue or have a feature request? Please [open an issue](https://github.com/mbgulden/Auto-Continue-Plus-Plus/issues) on our GitHub repository.

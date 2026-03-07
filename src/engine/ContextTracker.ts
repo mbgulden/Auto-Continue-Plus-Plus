@@ -50,6 +50,8 @@ export class ContextTracker {
 
     // Stability Tracking
     private _lastTokenIncreaseTime: number = Date.now();
+    private _lastAgentActivityTime: number = 0;
+    private _lastHumanWarningTime: number = 0;
 
     constructor(stateManager: StateManager) {
         this._stateManager = stateManager;
@@ -218,8 +220,26 @@ export class ContextTracker {
     }
 
     public isStable(): boolean {
-        // Return true if no tokens have been added in the last 10 seconds
-        return (Date.now() - this._lastTokenIncreaseTime) > 10000;
+        // Return true if no tokens have been added in the last 60 seconds (Graceful Handoff)
+        return (Date.now() - this._lastTokenIncreaseTime) > 60000;
+    }
+
+    public isAgentDriving(): boolean {
+        // Returns true if the Auto-Continue loop forcefully accepted a command/file in the last 2 minutes
+        return (Date.now() - this._lastAgentActivityTime) < 120000;
+    }
+
+    public markAgentActivity(): void {
+        this._lastAgentActivityTime = Date.now();
+    }
+
+    public warnHumanOfOverload(): void {
+        const now = Date.now();
+        // Warn at most once every 5 minutes
+        if (now - this._lastHumanWarningTime > 300000) {
+            vscode.window.showInformationMessage('You are near your context window limit! Feel free to finish your thought, then open a New Chat to clear the context.', 'Okay');
+            this._lastHumanWarningTime = now;
+        }
     }
 
     public isOverloaded(): boolean {

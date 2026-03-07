@@ -162,6 +162,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             if (accepted) {
                 watchdog.ping(); // Agent is alive!
+                contextTracker.markAgentActivity();
                 statusBar.update();
                 stateManager.incrementStat('files');
             }
@@ -207,6 +208,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             if (executed) {
                 watchdog.ping(); // Agent is making moves!
+                contextTracker.markAgentActivity();
                 contextTracker.addEstimatedTokens(100);
                 statusBar.update();
                 stateManager.incrementStat('commands');
@@ -221,8 +223,12 @@ export async function activate(context: vscode.ExtensionContext) {
     // Bind the context health check directly to the polling interval
     pollingEngine.setContextHealthCheck(async () => {
         if (contextTracker.isOverloaded() && contextTracker.isStable() && !handoffProtocol.isHandingOff) {
-            await handoffProtocol.executeHandoff();
-            statusBar.update();
+            if (contextTracker.isAgentDriving()) {
+                await handoffProtocol.executeHandoff();
+                statusBar.update();
+            } else {
+                contextTracker.warnHumanOfOverload();
+            }
         }
     });
 

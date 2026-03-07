@@ -89,8 +89,8 @@ export class HandoffProtocol {
         if (this._isHandingOff) return;
 
         this._isHandingOff = true;
-        console.warn(`[Auto-Continue] ⚠️ Context Overload Detected! Initiating Handoff Protocol...`);
-        vscode.window.showWarningMessage('Auto-Continue: Context Threshold Hit! Forcing Agent to execute Summary & Handoff...');
+        console.log(`[Auto-Continue] Context Overload Detected. Initiating Graceful Handoff Protocol...`);
+        vscode.window.showInformationMessage('Context capacity optimal limit reached. Preparing for a seamless session handoff...');
 
         try {
             const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -109,10 +109,10 @@ export class HandoffProtocol {
             // Trigger the auto-git snapshot BEFORE the agent blows away the context
             await this.captureGitSnapshot(rootPath, timestampIdentifier);
 
-            const overridePrompt = `[SYSTEM OVERRIDE] Your context window limit has been reached. Stop your current task immediately. You must summarize all completed work, current state, remaining tasks, and required file paths. YOU MUST SAVE THIS SUMMARY using your file-writing tools to a new file named \`${uniqueFilename}\` in the root of the workspace. Do not output the summary in chat, save it to the file.`;
+            const overridePrompt = `[SYSTEM NOTE] You are approaching your context window limit and a graceful handoff has been initiated. Please wrap up your current step. You must summarize all completed work, your current state, remaining tasks, and required file paths. YOU MUST SAVE THIS SUMMARY using your file-writing tools to a new file named \`${uniqueFilename}\` in the root of the workspace. Do not output the summary in chat, save it to the file.`;
 
             // Non-blocking Toast instead of {modal:true}
-            vscode.window.showWarningMessage("Auto-Continue Handoff Initiated. Please wait for the AI to summarize its state...");
+            vscode.window.showInformationMessage("Auto-Continue Handoff Initiated. Please wait for the AI to summarize its state...");
 
             try { await vscode.commands.executeCommand('antigravity.focus'); } catch (e) { /* ignore */ }
             await new Promise(resolve => setTimeout(resolve, 500));

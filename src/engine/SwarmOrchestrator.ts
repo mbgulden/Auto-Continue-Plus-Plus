@@ -5,6 +5,7 @@ import { SwarmLockManager } from './SwarmLockManager';
 import { SWARM_CLI_SCRIPT } from './SwarmCLI';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
 
 export class SwarmOrchestrator {
     private _handoffProtocol: HandoffProtocol;
@@ -94,31 +95,45 @@ The JSON schema MUST be an array of objects matching this exact structure:
   }
 ]`;
 
-            // Using standard fetch for REST call
-            // Using gemini-1.5-pro as the robust planner model (aka "3.1 Pro" equivalent capabilities)
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
+            const payload = JSON.stringify({
+                system_instruction: {
+                    parts: [{ text: systemInstruction }]
                 },
-                body: JSON.stringify({
-                    system_instruction: {
-                        parts: [{ text: systemInstruction }]
-                    },
-                    contents: [{
-                        parts: [{ text: `Analyze the following Megaprompt and decompose it:\n\n${prompt}` }]
-                    }],
-                    generationConfig: {
-                        response_mime_type: "application/json"
-                    }
-                })
+                contents: [{
+                    parts: [{ text: `Analyze the following Megaprompt and decompose it:\n\n${prompt}` }]
+                }],
+                generationConfig: {
+                    response_mime_type: "application/json"
+                }
             });
 
-            if (!response.ok) {
-                throw new Error(`Gemini API returned ${response.status} ${response.statusText}`);
-            }
+            const data = await new Promise<any>((resolve, reject) => {
+                const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': Buffer.byteLength(payload)
+                    }
+                }, (res) => {
+                    let responseBody = '';
+                    res.on('data', chunk => responseBody += chunk);
+                    res.on('end', () => {
+                        if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+                            reject(new Error(`Gemini API returned ${res.statusCode} ${res.statusMessage}: ${responseBody}`));
+                            return;
+                        }
+                        try {
+                            resolve(JSON.parse(responseBody));
+                        } catch (e) {
+                            reject(new Error("Failed to parse Gemini API response JSON."));
+                        }
+                    });
+                });
 
-            const data: any = await response.json();
+                req.on('error', reject);
+                req.write(payload);
+                req.end();
+            });
 
             if (!data.candidates || data.candidates.length === 0) {
                 throw new Error("No candidates returned from Gemini API.");

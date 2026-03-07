@@ -44,6 +44,10 @@
             {
                 "command": "auto-continue.swarm.spawnDelegates",
                 "title": "Auto-Continue Swarm: Spawn Delegates via Megaprompt"
+            },
+            {
+                "command": "auto-continue.enableCDP",
+                "title": "Auto-Continue: Enable Swarm CDP (Relaunch Workspace)"
             }
         ],
         "configuration": {

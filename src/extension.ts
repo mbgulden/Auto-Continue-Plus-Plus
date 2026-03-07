@@ -13,6 +13,7 @@ import { ContractManager } from './engine/ContractManager';
 import { SwarmOrchestrator } from './engine/SwarmOrchestrator';
 import { CDPHandler } from './engine/CDPHandler';
 import { SwarmWebview } from './ui/SwarmWebview';
+import * as cp from 'child_process';
 
 /**
  * Validates the Global Terms of Service at extension startup.
@@ -67,6 +68,9 @@ export async function activate(context: vscode.ExtensionContext) {
     const contractManager = new ContractManager();
     const handoffProtocol = new HandoffProtocol(stateManager, contextTracker, contractManager, cdpHandler);
     const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager);
+
+    // Provide initial UI state for CDP
+    cdpHandler.isCDPAvailable().then(isActive => statusBar.setCdpStatus(isActive));
 
     // Recovery Protocol for Stuck Agents
     const handleRecovery = async () => {
@@ -276,12 +280,38 @@ export async function activate(context: vscode.ExtensionContext) {
         SwarmWebview.createOrShow(swarmOrchestrator);
     });
 
+    const enableCDPCommand = vscode.commands.registerCommand('auto-continue.enableCDP', async () => {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            vscode.window.showErrorMessage('No active workspace available to relaunch.');
+            return;
+        }
+
+        const projectPath = workspaceFolders[0].uri.fsPath;
+        vscode.window.showInformationMessage('Auto-Continue: Relaunching VS Code with CDP Debugging enabled...');
+
+        // Wait a tiny bit for the UI to update with the message
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // Spawn a detached process to re-open the window
+        // Depending on platform, sometimes simply passing `.` works, but being explicit with path is safer
+        const child = cp.spawn('code', [projectPath, '--remote-debugging-port=9000'], {
+            detached: true,
+            stdio: 'ignore'
+        });
+        child.unref();
+
+        // Close the current window so it restarts essentially
+        await vscode.commands.executeCommand('workbench.action.closeWindow');
+    });
+
     context.subscriptions.push(
         toggleCommand,
         settingsCommand,
         dashboardCommand,
         forceSyncCommand,
         spawnSwarmCommand,
+        enableCDPCommand,
         statusBar,
         contextTracker,
         { dispose: () => lockManager.dispose() }

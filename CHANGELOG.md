@@ -4,6 +4,12 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.2] - 2026-03-06
+
+### Fixed
+- Replaced failing native `antigravity.chat.new` command during Handoff with a highly stable CDP DOM injection click.
+- Prevented aggressive Context Tracker interruptions while the user is actively typing a prompt by introducing an `isStable()` 10-second idle check.
+
 ## [1.1.1] - 2026-03-06
 
 ### Fixed

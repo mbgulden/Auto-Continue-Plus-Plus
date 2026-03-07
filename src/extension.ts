@@ -220,7 +220,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Bind the context health check directly to the polling interval
     pollingEngine.setContextHealthCheck(async () => {
-        if (contextTracker.isOverloaded() && !handoffProtocol.isHandingOff) {
+        if (contextTracker.isOverloaded() && contextTracker.isStable() && !handoffProtocol.isHandingOff) {
             await handoffProtocol.executeHandoff();
             statusBar.update();
         }

@@ -157,7 +157,29 @@ export class HandoffProtocol {
             LineageManager.logSpawnedThread(timestampIdentifier, previousContextText, workspaceName);
 
             try {
-                await vscode.commands.executeCommand('antigravity.chat.new');
+                if (this._cdpHandler && await this._cdpHandler.isCDPAvailable()) {
+                    const newChatScript = `
+                        (function() {
+                            const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+                            const newChatBtn = buttons.find(b => {
+                                const aria = b.getAttribute('aria-label') || '';
+                                const title = b.getAttribute('title') || '';
+                                const txt = b.textContent || '';
+                                return aria.toLowerCase().includes('new chat') || 
+                                       title.toLowerCase().includes('new') ||
+                                       txt.toLowerCase().includes('new chat');
+                            });
+                            if (newChatBtn) {
+                                newChatBtn.click();
+                            } else {
+                                console.warn('Auto-Continue CDP: Could not find New Chat button');
+                            }
+                        })();
+                    `;
+                    await this._cdpHandler.executeGlobalScript(newChatScript);
+                } else {
+                    await vscode.commands.executeCommand('antigravity.chat.new');
+                }
             } catch (e) {
                 vscode.window.showWarningMessage('Could not automatically open new Antigravity chat. Please open one manually.');
             }
@@ -222,7 +244,29 @@ export class HandoffProtocol {
 
             // 2. Spawn the new AI side panel
             try {
-                await vscode.commands.executeCommand('antigravity.chat.new');
+                if (this._cdpHandler && await this._cdpHandler.isCDPAvailable()) {
+                    const newChatScript = `
+                        (function() {
+                            const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+                            const newChatBtn = buttons.find(b => {
+                                const aria = b.getAttribute('aria-label') || '';
+                                const title = b.getAttribute('title') || '';
+                                const txt = b.textContent || '';
+                                return aria.toLowerCase().includes('new chat') || 
+                                       title.toLowerCase().includes('new') ||
+                                       txt.toLowerCase().includes('new chat');
+                            });
+                            if (newChatBtn) {
+                                newChatBtn.click();
+                            } else {
+                                console.warn('Auto-Continue CDP: Could not find New Chat button');
+                            }
+                        })();
+                    `;
+                    await this._cdpHandler.executeGlobalScript(newChatScript);
+                } else {
+                    await vscode.commands.executeCommand('antigravity.chat.new');
+                }
             } catch (e) {
                 vscode.window.showWarningMessage('Could not automatically open new Antigravity chat. Please open one manually.');
             }

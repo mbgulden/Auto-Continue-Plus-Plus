@@ -48,6 +48,9 @@ export class ContextTracker {
     private _workspaceName: string = "Unknown Workspace";
     private _workspacePath: string = "";
 
+    // Stability Tracking
+    private _lastTokenIncreaseTime: number = Date.now();
+
     constructor(stateManager: StateManager) {
         this._stateManager = stateManager;
 
@@ -174,6 +177,10 @@ export class ContextTracker {
 
         this._currentTokenCount += addedTokens;
 
+        if (addedTokens > 0) {
+            this._lastTokenIncreaseTime = Date.now();
+        }
+
         // Push the new tokens into StateManager for long-term budget tracking
         const refreshWindowHours = this._billingMode === 'googleOneSubscription' ? this._refreshHours : 24;
         this._stateManager.updateBudgetTokens(addedTokens, refreshWindowHours);
@@ -192,6 +199,10 @@ export class ContextTracker {
     public addEstimatedTokens(amount: number): void {
         this._currentTokenCount += amount;
 
+        if (amount > 0) {
+            this._lastTokenIncreaseTime = Date.now();
+        }
+
         const refreshWindowHours = this._billingMode === 'googleOneSubscription' ? this._refreshHours : 24;
         this._stateManager.updateBudgetTokens(amount, refreshWindowHours);
 
@@ -204,6 +215,11 @@ export class ContextTracker {
     public getHealthPercentage(): number {
         const percentage = this._currentTokenCount / this._tokenLimit;
         return Math.min(percentage, 1.0);
+    }
+
+    public isStable(): boolean {
+        // Return true if no tokens have been added in the last 10 seconds
+        return (Date.now() - this._lastTokenIncreaseTime) > 10000;
     }
 
     public isOverloaded(): boolean {

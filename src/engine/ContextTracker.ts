@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { StateManager } from '../state/StateManager';
 import { get_encoding, Tiktoken } from 'tiktoken';
+import { AntigravityAPI } from './AntigravityAPI';
 
 export interface BudgetProjection {
     mode: 'googleOneSubscription' | 'payAsYouGoAPI';
@@ -148,6 +149,41 @@ export class ContextTracker {
                 this._writeHeartbeat();
             }
         }, 5000);
+
+        // Every 30 seconds, dynamically hijack the Language Server to find out what model the human selected
+        setInterval(() => this.syncDynamicModelLimit(), 30000);
+        this.syncDynamicModelLimit();
+    }
+
+    private async syncDynamicModelLimit() {
+        if (!this._stateManager.isActive) return;
+        try {
+            const model = await AntigravityAPI.getCurrentModel();
+            if (model) {
+                // Dynamically adapt Auto-Continue Context Boundaries to out-of-the-box model defaults
+                let newLimit = 120000;
+                const lowerModel = model.toLowerCase();
+
+                if (lowerModel.includes('gemini')) {
+                    if (lowerModel.includes('flash')) {
+                        newLimit = 1000000;
+                    } else if (lowerModel.includes('pro')) {
+                        newLimit = 2000000;
+                    }
+                } else if (lowerModel.includes('claude') || lowerModel.includes('sonnet') || lowerModel.includes('opus')) {
+                    newLimit = 200000;
+                } else if (lowerModel.includes('gpt-4')) {
+                    newLimit = 128000;
+                }
+
+                // Only override if it actually changed
+                if (this._tokenLimit !== newLimit && newLimit > 0) {
+                    console.log(`[Auto-Continue API] Model switched to ${model}. Auto-adjusting Context Limit to ${newLimit} tokens.`);
+                    this._tokenLimit = newLimit;
+                    this._onDidChangeHealth.fire(this.getHealthPercentage());
+                }
+            }
+        } catch (e) { }
     }
 
     /**

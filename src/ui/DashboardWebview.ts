@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { StateManager } from '../state/StateManager';
 import { ContextTracker, AgentHeartbeat } from '../engine/ContextTracker';
 import { LineageManager, LineageMeta, GlobalConversation } from '../engine/LineageManager';
+import { AntigravityAPI, ModelQuotaStatus } from '../engine/AntigravityAPI';
 
 export class DashboardWebview {
     public static currentPanel: DashboardWebview | undefined;
@@ -58,7 +59,7 @@ export class DashboardWebview {
         );
     }
 
-    public _update(stateManager: StateManager, contextTracker: ContextTracker) {
+    public async _update(stateManager: StateManager, contextTracker: ContextTracker) {
         const health = Math.round(contextTracker.getHealthPercentage() * 100);
         const stats = stateManager.getStats();
 
@@ -71,8 +72,46 @@ export class DashboardWebview {
         const cost = contextTracker.getEstimatedCost();
         const historyData = contextTracker.getTokenHistory();
 
+        // Grab new API Quota metrics directly from Antigravity local language server
+        let quotaHtml = '';
+        let activeModelText = 'Discovering...';
+        try {
+            const quotas = await AntigravityAPI.getQuotaStatus();
+            const activeModel = await AntigravityAPI.getCurrentModel();
+
+            if (activeModel) activeModelText = activeModel;
+
+            if (quotas && quotas.length > 0) {
+                quotaHtml = `<div class="card" style="border-top: 3px solid var(--vscode-terminal-ansiMagenta);">
+                    <h2 style="margin-top: 0;">💎 Global Quota & Budget</h2>
+                    <p style="font-size: 0.9em; opacity: 0.8; margin-bottom: 15px;">True API Budget sourced directly from ${activeModelText} Engine via Localhost Interface Hack.</p>
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">`;
+
+                quotas.forEach((q: any) => {
+                    const modelName = q.modelId || 'Unknown Model';
+                    const pct = Math.round((q.creditsRemaining / Math.max(q.creditsTotal, 1)) * 100);
+                    const barColor = pct < 20 ? 'red' : (pct < 50 ? 'orange' : 'var(--vscode-terminal-ansiMagenta)');
+
+                    quotaHtml += `
+                    <div class="node-child" style="border-left: 2px solid ${barColor}; padding: 10px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <p style="margin: 0;"><b>${modelName}</b></p>
+                            <span style="font-size: 0.8em; opacity: 0.8;">Refreshes in ${q.refreshMinutesRemaining || 0}m</span>
+                        </div>
+                        <div class="bar-container" style="margin-top: 8px; height: 6px; margin-bottom: 5px; background: var(--vscode-editor-background);">
+                            <div class="bar" style="width: ${pct}%; background-color: ${barColor};"></div>
+                        </div>
+                        <div style="text-align: right; font-size: 0.8em; color: ${barColor}; font-weight: bold; margin-top: 2px;">
+                            ${q.creditsRemaining} / ${q.creditsTotal} Credits
+                        </div>
+                    </div>`;
+                });
+                quotaHtml += `</div></div>`;
+            }
+        } catch (e) { }
+
         this._panel.title = "Agent Manager";
-        this._panel.webview.html = this._getHtmlForWebview(health, stats, activeSessions, globalConversations, burnRate, cost, historyData);
+        this._panel.webview.html = this._getHtmlForWebview(health, stats, activeSessions, globalConversations, burnRate, cost, historyData, quotaHtml);
     }
 
     public dispose() {
@@ -287,7 +326,7 @@ export class DashboardWebview {
         `;
     }
 
-    private _getHtmlForWebview(health: number, stats: any, activeSessions: AgentHeartbeat[], globalConversations: GlobalConversation[], burnRate: number, cost: string, historyData: { timestamp: number, tokens: number }[]) {
+    private _getHtmlForWebview(health: number, stats: any, activeSessions: AgentHeartbeat[], globalConversations: GlobalConversation[], burnRate: number, cost: string, historyData: { timestamp: number, tokens: number }[], quotaHtml: string) {
         const liveWorkspacesHtml = this._generateActiveSessionsHtml(activeSessions, health);
         const globalConversationsHtml = this._generateGlobalConversationsHtml(globalConversations);
         const sparklineSvg = this._generateSvgSparkline(historyData);
@@ -323,6 +362,8 @@ export class DashboardWebview {
                     
                     ${liveWorkspacesHtml}
                 </div>
+
+                ${quotaHtml}
 
                 ${globalConversationsHtml}
 

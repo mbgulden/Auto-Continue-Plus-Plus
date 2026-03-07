@@ -4,6 +4,14 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.3] - 2026-03-06
+
+### Added
+- **Human-Centric Context Handoff Logic**: Differentiates between AI and user driven actions to provide a graceful handoff experience. Stops the system from forcefully wiping context during human idle time and replaces aggressive toasts with polite reminders.
+- **Language Server Process Scanner API Hack**: Discovers the local language server process, port, and security token. Connects securely to the Antigravity backend API port.
+- **True Dashboard Metrics via API**: Switched Power User Dashboard budget projection lines from guessed mathematics to hard budget Quota API scrapes using the hidden language server connection.
+- **Adaptive Context Window Auto-Scaling**: The system now dynamically adjusts its Handoff thresholds depending on your active model limit (e.g. 120k vs 2M tokens).
+
 ## [1.1.2] - 2026-03-06
 
 ### Fixed

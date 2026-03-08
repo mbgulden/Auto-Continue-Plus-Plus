@@ -14,7 +14,7 @@
  *   window.__autoAcceptStop()
  *   window.__autoAcceptGetStats()
  */
-(function() {
+(function () {
     'use strict';
 
     if (typeof window === 'undefined') return;
@@ -55,7 +55,7 @@
     // (ported from compositor + modules/03_clicking.js)
     // =================================================================
 
-    const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow'];
+    const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation'];
     const rejectPatterns = ['skip', 'reject', 'cancel', 'close', 'refine'];
     const COMMAND_ELEMENTS = ['pre', 'code', 'pre code'];
 
@@ -203,7 +203,36 @@
                 if (isAcceptButton(el)) {
                     const btnText = (el.textContent || '').trim();
                     log(`Clicking: "${btnText}"`);
-                    el.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
+
+                    const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+                    for (const eventName of events) {
+                        try {
+                            const eventType = eventName.startsWith('pointer') ? window.PointerEvent : window.MouseEvent;
+                            // Need to check if PointerEvent exists in this context
+                            if (eventName.startsWith('pointer') && typeof window.PointerEvent === 'undefined') {
+                                continue;
+                            }
+                            el.dispatchEvent(new (eventType || MouseEvent)(eventName, {
+                                view: window,
+                                bubbles: true,
+                                cancelable: true,
+                                composed: true
+                            }));
+                        } catch (e) {
+                            // Fallback to MouseEvent if PointerEvent constructor fails
+                            try {
+                                el.dispatchEvent(new MouseEvent(eventName, {
+                                    view: window,
+                                    bubbles: true,
+                                    cancelable: true,
+                                    composed: true
+                                }));
+                            } catch (fallbackErr) {
+                                log(`Error dispatching ${eventName}: ${fallbackErr.message}`);
+                            }
+                        }
+                    }
+
                     clicked++;
                     const state = window.__autoAcceptState;
                     if (state) state.clicks = (state.clicks || 0) + 1;
@@ -1003,7 +1032,7 @@
         };
     }
 
-    window.__autoAcceptGetStats = function() {
+    window.__autoAcceptGetStats = function () {
         const s = window.__autoAcceptState || {};
         return {
             clicks: s.clicks || 0,
@@ -1013,7 +1042,7 @@
         };
     };
 
-    window.__autoAcceptConsumeSummaryRequest = function() {
+    window.__autoAcceptConsumeSummaryRequest = function () {
         const s = window.__autoAcceptState || {};
         if (!s.summaryRequestPending) return { requested: false };
         s.summaryRequestPending = false;
@@ -1023,7 +1052,7 @@
         };
     };
 
-    window.__autoAcceptSetSummaryResult = function(payload) {
+    window.__autoAcceptSetSummaryResult = function (payload) {
         const s = window.__autoAcceptState || {};
         const p = payload || {};
         if (p.status === 'loading') {
@@ -1051,12 +1080,12 @@
         setSummaryWidgetState({ status: 'idle' });
     };
 
-    window.__autoAcceptGetVisibleConversationText = function(maxChars) {
+    window.__autoAcceptGetVisibleConversationText = function (maxChars) {
         const cap = Number(maxChars) > 0 ? Number(maxChars) : 12000;
         return collectVisibleConversationText(cap);
     };
 
-    window.__autoAcceptStart = function(config) {
+    window.__autoAcceptStart = function (config) {
         const state = window.__autoAcceptState;
 
         // Stop if already running
@@ -1136,7 +1165,7 @@
         log('Active!');
     };
 
-    window.__autoAcceptStop = function() {
+    window.__autoAcceptStop = function () {
         const state = window.__autoAcceptState;
         state.isRunning = false;
 
@@ -1163,8 +1192,8 @@
     };
 
     // Compatibility placeholders for cdp-handler.js
-    window.__autoAcceptSetFocusState = function() {};
-    window.__autoAcceptUpdateBannedCommands = function(bannedList) {
+    window.__autoAcceptSetFocusState = function () { };
+    window.__autoAcceptUpdateBannedCommands = function (bannedList) {
         const state = window.__autoAcceptState;
         if (state) {
             state.bannedCommands = Array.isArray(bannedList) ? bannedList : [];

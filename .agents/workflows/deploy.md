@@ -6,7 +6,7 @@ description: Build, package, and publish the Auto-Continue Plus Plus extension
 This workflow automates the process of bumping the version, optimizing the build, committing to GitHub, and publishing to both the VS Code Marketplace and Open VSX Registry. We use unified npm scripts to manage this process cross-platform.
 
 ## Prerequisites
-Ensure your authorization tokens from `keys.md` are exported to your environment before running this!
+Ensure your authorization tokens from `.agents/knowledge/keys.md` are exported to your environment before running this!
 
 If running from bash/zsh:
 ```bash

@@ -4,6 +4,11 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.4] - 2026-03-07
+
+### Added
+- Minor updates and auto-accept improvements.
+
 ## [1.1.3] - 2026-03-06
 
 ### Added

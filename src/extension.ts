@@ -281,6 +281,19 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     const enableCDPCommand = vscode.commands.registerCommand('auto-continue.enableCDP', async () => {
+        // Prevent action if already active
+        const isActive = await cdpHandler.isCDPAvailable();
+        if (isActive) {
+            vscode.window.showInformationMessage('Swarm CDP is already active (Port Open). No restart needed.');
+            return;
+        }
+
+        // Prevent action if remote host (since spawning code will be headless/remote)
+        if (vscode.env.remoteName) {
+            vscode.window.showWarningMessage('Auto-Continue: You are connected via Remote SSH. Please manually restart your local VS Code window with the "--remote-debugging-port=9000" flag. Auto-relaunch is not supported remotely.');
+            return;
+        }
+
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0) {
             vscode.window.showErrorMessage('No active workspace available to relaunch.');

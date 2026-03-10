@@ -55,7 +55,7 @@
     // (ported from compositor + modules/03_clicking.js)
     // =================================================================
 
-    const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation'];
+    const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation', 'allow this conversation'];
     const rejectPatterns = ['skip', 'reject', 'cancel', 'close', 'refine'];
     const COMMAND_ELEMENTS = ['pre', 'code', 'pre code'];
 

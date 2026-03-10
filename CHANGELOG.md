@@ -4,6 +4,16 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.6] - 2026-03-10
+
+### Fixed
+- Fixed deployment script and deployed latest stable version for the Auto-Accept system.
+
+## [1.1.5] - 2026-03-08
+
+### Added
+- Improvements to CDP automation and task delegation stability.
+
 ## [1.1.4] - 2026-03-07
 
 ### Added

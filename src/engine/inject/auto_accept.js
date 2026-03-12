@@ -160,7 +160,10 @@
     // --- BUTTON DETECTION ---
 
     function isAcceptButton(el) {
-        const text = (el.textContent || '').trim().toLowerCase();
+        let text = (el.textContent || '').trim().toLowerCase();
+        if (text.length === 0) {
+            text = (el.getAttribute('title') || el.getAttribute('aria-label') || '').trim().toLowerCase();
+        }
         if (text.length === 0 || text.length > 50) return false;
 
         for (const rp of rejectPatterns) {
@@ -189,7 +192,7 @@
         if (ide === 'antigravity') {
             return ['.bg-ide-button-background', 'button.bg-primary', 'button.rounded-l'];
         }
-        return ['button', '[class*="button"]', '[class*="anysphere"]'];
+        return ['button', '[class*="button"]', '[class*="anysphere"]', 'a[role="button"]', '.action-label', '.codicon'];
     }
 
     function clickAcceptButtons() {

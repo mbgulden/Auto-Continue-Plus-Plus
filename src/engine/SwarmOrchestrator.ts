@@ -27,7 +27,7 @@ export class SwarmOrchestrator {
      * Does NOT spawn them immediately.
      */
     public async decomposeMegaprompt(megaprompt: string): Promise<AgentContract[]> {
-        vscode.window.showInformationMessage('Auto-Continue Swarm: Analyzing Megaprompt with Gemini 3.1 Pro (Preview)...');
+        vscode.window.showInformationMessage('Auto-Continue Swarm: Analyzing Megaprompt (auto-selecting best Gemini 3 model)...');
         const tasks = await this._decomposePromptWithGemini(megaprompt);
 
         if (tasks.length === 0) {
@@ -73,16 +73,15 @@ export class SwarmOrchestrator {
      * Intelligent parser using Gemini REST API to break down a Megaprompt into structured JSON.
      */
     private async _decomposePromptWithGemini(prompt: string): Promise<Array<{ role: string, description: string, allowedDirectories: string[], readOnlyDirectories: string[] }>> {
-        try {
-            const config = vscode.workspace.getConfiguration('autoContinue');
-            const apiKey = config.get<string>('geminiApiKey');
+        const config = vscode.workspace.getConfiguration('autoContinue');
+        const apiKey = config.get<string>('geminiApiKey');
 
-            if (!apiKey) {
-                vscode.window.showErrorMessage('Auto-Continue Swarm: Gemini API Key is missing. Please add it in settings (autoContinue.geminiApiKey).');
-                return [];
-            }
+        if (!apiKey) {
+            vscode.window.showErrorMessage('Auto-Continue Swarm: Gemini API Key is missing. Please add it in settings (autoContinue.geminiApiKey).');
+            return [];
+        }
 
-            const systemInstruction = `You are the Swarm Orchestrator Manager. Your job is to take a user's large feature request (Megaprompt) and break it down into distinct, specialized, non-overlapping tasks for Worker Agents. 
+        const systemInstruction = `You are the Swarm Orchestrator Manager. Your job is to take a user's large feature request (Megaprompt) and break it down into distinct, specialized, non-overlapping tasks for Worker Agents. 
 You MUST output ONLY valid JSON format. No markdown blocks, no conversational text. Just the raw JSON array.
 
 The JSON schema MUST be an array of objects matching this exact structure:
@@ -95,68 +94,81 @@ The JSON schema MUST be an array of objects matching this exact structure:
   }
 ]`;
 
-            const payload = JSON.stringify({
-                system_instruction: {
-                    parts: [{ text: systemInstruction }]
-                },
-                contents: [{
-                    parts: [{ text: `Analyze the following Megaprompt and decompose it:\n\n${prompt}` }]
-                }],
-                generationConfig: {
-                    response_mime_type: "application/json"
-                }
-            });
+        const payload = JSON.stringify({
+            system_instruction: {
+                parts: [{ text: systemInstruction }]
+            },
+            contents: [{
+                parts: [{ text: `Analyze the following Megaprompt and decompose it:\n\n${prompt}` }]
+            }],
+            generationConfig: {
+                response_mime_type: "application/json"
+            }
+        });
 
-            const data = await new Promise<any>((resolve, reject) => {
-                const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Content-Length': Buffer.byteLength(payload)
-                    }
-                }, (res) => {
-                    let responseBody = '';
-                    res.on('data', chunk => responseBody += chunk);
-                    res.on('end', () => {
-                        if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-                            reject(new Error(`Gemini API returned ${res.statusCode} ${res.statusMessage}: ${responseBody}`));
-                            return;
+        const modelsToTry = [
+            'gemini-3.1-pro-preview',
+            'gemini-3.1-pro',
+            'gemini-3-pro-preview',
+            'gemini-3-pro',
+            'gemini-3-flash-preview',
+            'gemini-3-flash',
+            'gemini-2.0-flash'
+        ];
+
+        for (const model of modelsToTry) {
+            try {
+                const data = await new Promise<any>((resolve, reject) => {
+                    const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Content-Length': Buffer.byteLength(payload)
                         }
-                        try {
-                            resolve(JSON.parse(responseBody));
-                        } catch (e) {
-                            reject(new Error("Failed to parse Gemini API response JSON."));
-                        }
+                    }, (res) => {
+                        let responseBody = '';
+                        res.on('data', chunk => responseBody += chunk);
+                        res.on('end', () => {
+                            if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+                                reject(new Error(`API returned ${res.statusCode}: ${responseBody}`));
+                                return;
+                            }
+                            try {
+                                resolve(JSON.parse(responseBody));
+                            } catch (e) {
+                                reject(new Error("Failed to parse Gemini API response JSON."));
+                            }
+                        });
                     });
+
+                    req.on('error', reject);
+                    req.write(payload);
+                    req.end();
                 });
 
-                req.on('error', reject);
-                req.write(payload);
-                req.end();
-            });
+                if (!data.candidates || data.candidates.length === 0) {
+                    throw new Error("No candidates returned from Gemini API.");
+                }
 
-            if (!data.candidates || data.candidates.length === 0) {
-                throw new Error("No candidates returned from Gemini API.");
+                let responseText = data.candidates[0].content.parts[0].text;
+                responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+                const parsedTasks = JSON.parse(responseText);
+
+                if (!Array.isArray(parsedTasks)) {
+                    throw new Error("LLM did not return a JSON array.");
+                }
+
+                console.log(`[Auto-Continue Swarm] Successfully used ${model} for decomposition.`);
+                return parsedTasks;
+
+            } catch (e: any) {
+                console.warn(`[Auto-Continue Swarm] Model ${model} failed: ${e.message}. Trying next...`);
             }
-
-            let responseText = data.candidates[0].content.parts[0].text;
-
-            // Clean up potential markdown formatting from the response
-            responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-
-            const parsedTasks = JSON.parse(responseText);
-
-            if (!Array.isArray(parsedTasks)) {
-                throw new Error("LLM did not return a JSON array.");
-            }
-
-            return parsedTasks;
-
-        } catch (e: any) {
-            console.error('[Auto-Continue Swarm] Decomposition failed:', e);
-            vscode.window.showErrorMessage(`Swarm Megaprompt Decomposition Failed: ${e.message}`);
-            return [];
         }
+
+        vscode.window.showErrorMessage(`Swarm Megaprompt Decomposition Failed: All fallback models exhausted. Please check your API key permissions.`);
+        return [];
     }
 
     /**

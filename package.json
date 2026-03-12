@@ -2,7 +2,7 @@
     "name": "auto-continue-plus-plus",
     "displayName": "Auto-Continue Plus Plus",
     "description": "Advanced Auto-Accept Agent with Multi-Tab and Recovery features.",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "publisher": "mbgulden",
     "repository": {
         "type": "git",
@@ -109,7 +109,7 @@
                 "autoContinue.geminiApiKey": {
                     "type": "string",
                     "default": "",
-                    "description": "Optional: Your personal Gemini API key to power Swarm Megaprompt Decomposition via Gemini 3.1 Pro."
+                    "description": "Optional: Your personal Gemini API key to power Swarm Megaprompt Decomposition via Gemini 2.0 Flash."
                 }
             }
         }

@@ -27,7 +27,7 @@ export class SwarmOrchestrator {
      * Does NOT spawn them immediately.
      */
     public async decomposeMegaprompt(megaprompt: string): Promise<AgentContract[]> {
-        vscode.window.showInformationMessage('Auto-Continue Swarm: Analyzing Megaprompt with Gemini 3.1 Pro...');
+        vscode.window.showInformationMessage('Auto-Continue Swarm: Analyzing Megaprompt with Gemini 2.0 Flash...');
         const tasks = await this._decomposePromptWithGemini(megaprompt);
 
         if (tasks.length === 0) {
@@ -108,7 +108,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
             });
 
             const data = await new Promise<any>((resolve, reject) => {
-                const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`, {
+                const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

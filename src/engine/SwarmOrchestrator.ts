@@ -108,63 +108,76 @@ The JSON schema MUST be an array of objects matching this exact structure:
 
         const modelsToTry = [
             'gemini-3.1-pro-preview',
-            'gemini-3.1-pro',
+            'gemini-3.1-pro-preview-customtools',
+            'gemini-3.1-flash-lite-preview',
+            'gemini-3.1-flash-image-preview',
             'gemini-3-pro-preview',
-            'gemini-3-pro',
+            'gemini-3-pro-image-preview',
             'gemini-3-flash-preview',
-            'gemini-3-flash',
-            'gemini-2.0-flash'
+            'gemini-2.5-flash',
+            'gemini-2.5-pro',
+            'gemini-2.0-pro-exp-02-05',
+            'gemini-2.0-flash-thinking-exp-01-21',
+            'gemini-2.0-flash',
+            'gemini-2.0-flash-lite-preview-02-05',
+            'gemini-1.5-pro',
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-8b'
         ];
 
-        for (const model of modelsToTry) {
-            try {
-                const data = await new Promise<any>((resolve, reject) => {
-                    const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Content-Length': Buffer.byteLength(payload)
-                        }
-                    }, (res) => {
-                        let responseBody = '';
-                        res.on('data', chunk => responseBody += chunk);
-                        res.on('end', () => {
-                            if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-                                reject(new Error(`API returned ${res.statusCode}: ${responseBody}`));
-                                return;
+        try {
+            for (const model of modelsToTry) {
+                try {
+                    const data = await new Promise<any>((resolve, reject) => {
+                        const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Content-Length': Buffer.byteLength(payload)
                             }
-                            try {
-                                resolve(JSON.parse(responseBody));
-                            } catch (e) {
-                                reject(new Error("Failed to parse Gemini API response JSON."));
-                            }
+                        }, (res) => {
+                            let responseBody = '';
+                            res.on('data', chunk => responseBody += chunk);
+                            res.on('end', () => {
+                                if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+                                    reject(new Error(`API returned ${res.statusCode}: ${responseBody}`));
+                                    return;
+                                }
+                                try {
+                                    resolve(JSON.parse(responseBody));
+                                } catch (e) {
+                                    reject(new Error("Failed to parse Gemini API response JSON."));
+                                }
+                            });
                         });
+
+                        req.on('error', reject);
+                        req.write(payload);
+                        req.end();
                     });
 
-                    req.on('error', reject);
-                    req.write(payload);
-                    req.end();
-                });
+                    if (!data.candidates || data.candidates.length === 0) {
+                        throw new Error(`No candidates returned from Gemini API for ${model}.`);
+                    }
 
-                if (!data.candidates || data.candidates.length === 0) {
-                    throw new Error("No candidates returned from Gemini API.");
+                    let responseText = data.candidates[0].content.parts[0].text;
+                    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+                    const parsedTasks = JSON.parse(responseText);
+
+                    if (!Array.isArray(parsedTasks)) {
+                        throw new Error(`LLM (${model}) did not return a JSON array.`);
+                    }
+
+                    console.log(`[Auto-Continue Swarm] Successfully used ${model} for decomposition.`);
+                    return parsedTasks;
+
+                } catch (e: any) {
+                    console.warn(`[Auto-Continue Swarm] Model ${model} failed: ${e.message}. Trying next...`);
                 }
-
-                let responseText = data.candidates[0].content.parts[0].text;
-                responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-
-                const parsedTasks = JSON.parse(responseText);
-
-                if (!Array.isArray(parsedTasks)) {
-                    throw new Error("LLM did not return a JSON array.");
-                }
-
-                console.log(`[Auto-Continue Swarm] Successfully used ${model} for decomposition.`);
-                return parsedTasks;
-
-            } catch (e: any) {
-                console.warn(`[Auto-Continue Swarm] Model ${model} failed: ${e.message}. Trying next...`);
             }
+        } catch (outerError: any) {
+             console.error(`[Auto-Continue Swarm] Catastrophic failure in fallback loop: ${outerError.message}`);
         }
 
         vscode.window.showErrorMessage(`Swarm Megaprompt Decomposition Failed: All fallback models exhausted. Please check your API key permissions.`);

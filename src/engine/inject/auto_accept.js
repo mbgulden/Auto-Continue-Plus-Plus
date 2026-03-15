@@ -234,34 +234,52 @@
                     const btnText = (el.textContent || '').trim();
                     log(`Clicking: "${btnText}"`);
 
+                    // Prevent focus stealing and scroll jumping
+                    const activeEl = document.activeElement;
+                    const scrollY = window.scrollY;
+                    const scrollX = window.scrollX;
+                    const panel = el.closest('.auxiliary-bar-container') || el.closest('#workbench\\.parts\\.auxiliarybar') || el.closest('#antigravity\\.agentPanel');
+                    const panelScroll = panel ? panel.scrollTop : 0;
+
                     const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
                     for (const eventName of events) {
                         try {
                             const eventType = eventName.startsWith('pointer') ? window.PointerEvent : window.MouseEvent;
-                            // Need to check if PointerEvent exists in this context
                             if (eventName.startsWith('pointer') && typeof window.PointerEvent === 'undefined') {
                                 continue;
                             }
-                            el.dispatchEvent(new (eventType || MouseEvent)(eventName, {
+                            
+                            const ev = new (eventType || MouseEvent)(eventName, {
                                 view: window,
                                 bubbles: true,
                                 cancelable: true,
-                                composed: true
-                            }));
+                                composed: true,
+                                clientX: 0,
+                                clientY: 0
+                            });
+                            
+                            el.dispatchEvent(ev);
                         } catch (e) {
-                            // Fallback to MouseEvent if PointerEvent constructor fails
                             try {
-                                el.dispatchEvent(new MouseEvent(eventName, {
+                                const ev = new MouseEvent(eventName, {
                                     view: window,
                                     bubbles: true,
                                     cancelable: true,
-                                    composed: true
-                                }));
+                                    composed: true,
+                                    clientX: 0,
+                                    clientY: 0
+                                });
+                                el.dispatchEvent(ev);
                             } catch (fallbackErr) {
                                 log(`Error dispatching ${eventName}: ${fallbackErr.message}`);
                             }
                         }
                     }
+
+                    // Restore focus and scroll position immediately
+                    if (activeEl && typeof activeEl.focus === 'function') activeEl.focus({ preventScroll: true });
+                    window.scrollTo(scrollX, scrollY);
+                    if (panel) panel.scrollTop = panelScroll;
 
                     clicked++;
                     const state = window.__autoAcceptState;

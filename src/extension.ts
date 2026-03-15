@@ -118,8 +118,12 @@ export async function activate(context: vscode.ExtensionContext) {
         const allCommands = await getCachedCommands();
         for (const cmd of commandsList) {
             if (allCommands.includes(cmd)) {
-                await vscode.commands.executeCommand(cmd);
-                executed = true;
+                try {
+                    await vscode.commands.executeCommand(cmd);
+                    executed = true;
+                } catch (e) {
+                    console.warn(`[Auto-Continue] Native command ${cmd} threw an error:`, e);
+                }
             }
         }
         return executed;

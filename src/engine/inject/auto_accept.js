@@ -190,9 +190,9 @@
         const state = window.__autoAcceptState;
         const ide = state ? state.ide : 'cursor';
         if (ide === 'antigravity') {
-            return ['.bg-ide-button-background', 'button.bg-primary', 'button.rounded-l'];
+            return ['button', 'vscode-button', '.bg-ide-button-background', 'button.bg-primary', 'button.rounded-l', '[class*="button"]', '.codicon', '.action-label'];
         }
-        return ['button', '[class*="button"]', '[class*="anysphere"]', 'a[role="button"]', '.action-label', '.codicon'];
+        return ['button', 'vscode-button', '[class*="button"]', '[class*="anysphere"]', 'a[role="button"]', '.action-label', '.codicon'];
     }
 
     function clickAcceptButtons() {

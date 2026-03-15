@@ -44,8 +44,9 @@ export class Watchdog {
 
         // Check every 5 seconds if the timeout has been breached
         this._watchdogIntervalId = setInterval(() => {
-            if (!this._stateManager.isActive) {
-                this.stop();
+            if (!this._stateManager.isActive || this._recoveryTimeoutSeconds <= 0) {
+                // If it becomes disabled, just do nothing and wait for changes.
+                // Or we can stop it, but config changes might reactivate it without a start.
                 return;
             }
 

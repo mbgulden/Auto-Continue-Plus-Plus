@@ -1,5 +1,6 @@
 import * as esbuild from 'esbuild';
-
+import * as fs from 'fs';
+import * as path from 'path';
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
@@ -31,6 +32,7 @@ async function main() {
         bundle: true,
         format: 'cjs',
         minify: production,
+        drop: production ? ['console'] : [],
         sourcemap: !production,
         sourcesContent: false,
         platform: 'node',
@@ -40,6 +42,16 @@ async function main() {
         plugins: [
             /* add to the end of plugins array */
             esbuildProblemMatcherPlugin,
+            {
+                name: 'copy-inject-scripts',
+                setup(build) {
+                    build.onEnd(() => {
+                        const targetDir = 'dist/src/engine/inject';
+                        fs.mkdirSync(targetDir, { recursive: true });
+                        fs.copyFileSync('src/engine/inject/auto_accept.js', path.join(targetDir, 'auto_accept.js'));
+                    });
+                }
+            }
         ],
     });
     if (watch) {

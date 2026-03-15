@@ -8,6 +8,7 @@ export interface AgentContract {
     taskDescription: string;
     allowedDirectories: string[];
     readOnlyDirectories: string[];
+    targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI';
     maxTokens?: number;
 }
 

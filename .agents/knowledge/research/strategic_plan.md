@@ -16,11 +16,16 @@ Instead, **lean heavily into the VS Code / Google Antigravity environment.**
 ## Architecture: The "Additive Bolt-On" Approach
 To build something truly useful and avoid the traps of OpenClaw, the system must be modular, strongly typed, and verifiable.
 
-### 1. Hybrid AI Processing & Tiered Intelligence Router (Cost & Speed Optimization)
-Avoid OpenClaw's mistake of routing everything to expensive models. Implement an "always-on" Swarm Orchestrator that continuously acts as a context filter and task router, dumbing down prompts for local hardware while reserving context for heavy models:
-- **Tier 3 (Local/Always On/Optional Gemini Flash if no local AI is available):** Fast, free models running on local AI hardware (e.g., Llama 3 via LM Studio or Ollama). Used strictly for routine tasks: intent classification, syntax checking, extracting variables, formatting JSON.
-- **Tier 2 (Metered API/Google Antigravity Gemini 3 Flash / Normal Nanobanana via Antigravity / "Smarter" local AI --establish model size standards for each respecitve local AI tier's use):** Cheap, fast cloud models. Used for generating basic boilerplate, writing simple unit tests, or CRUD endpoints.
-- **Tier 1 (Google Antigravity / Jules / Gemini Advanced / Nanobanana Pro Models via Antigravity / High capacity locally hosted AI Models with high context windows):** Expensive, heavy reasoning models. Reserved strictly for complex codebase refactoring, high-level architectural design, and deep debugging, kicking in when lower tiers fail.
+### 1. The Triple-Headed Hybrid AI Router Engine (Cost & Speed Optimization)
+Avoid OpenClaw's mistake of routing everything to expensive models. Implement an "always-on" Swarm Orchestrator that continuously acts as a context filter and task router. The Router commands three distinct "Heads":
+
+1. **The Antigravity Engine (Sidebar Automation):** Treated as built-in structure/knowledge. Tasks sent here are strictly queued by the `ContractManager` to prevent IDE UI bleeding (max 1 active conversation, others queued). Used to leverage Gemini's context for "cheap fuel" and second opinions on complete tasks.
+2. **The Headless API Swarm (Parallel Execution):** Direct API calls running entirely in the background. Used for rapid, concurrent parallel execution without touching the VS Code UI.
+3. **The Local AI Swarm (The Enforcer):** Fast, free models running on local hardware. Used strictly for routine tasks: intent classification, syntax checking, extracting variables, and "Proof of Work" schema grading.
+
+- **Tier 3 (Local/Always On/Optional Gemini Flash):** Fast, free models running on local AI hardware. Used for routine tasks: intent classification, syntax checking, extracting variables, formatting JSON.
+- **Tier 2 (Metered API/Antigravity Gemini 3 Flash/"Smarter" local AI):** Cheap, fast cloud models. Used for basic boilerplate, unit tests, or CRUD endpoints.
+- **Tier 1 (Google Antigravity/Jules/Gemini Advanced/Pro Models/High-capacity Local AI):** Expensive, heavy reasoning models. Reserved strictly for complex codebase refactoring, high-level architectural design, and deep debugging.
 
 ### 2. Strict Swarm Contracts & "Proof of Work" (Anti-"Quiet Failure")
 OpenClaw fails quietly because it trusts the agent's self-assessment. Auto-Continue Plus Plus must implement **Zero-Trust Verification** and a **Qualification Standard** for all agents, especially local hardware.

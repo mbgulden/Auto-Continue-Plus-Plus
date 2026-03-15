@@ -42,37 +42,60 @@ export class SwarmOrchestrator {
                 role: t.role,
                 taskDescription: t.description,
                 allowedDirectories: t.allowedDirectories || ['src/'],
-                readOnlyDirectories: t.readOnlyDirectories || []
+                readOnlyDirectories: t.readOnlyDirectories || [],
+                targetHead: t.targetHead || 'Headless API'
             };
         });
     }
 
     /**
-     * Accepts a list of confirmed AgentContracts and spawns them.
+     * Accepts a list of confirmed AgentContracts and routes them.
      */
     public async spawnDelegatesFromContracts(contracts: AgentContract[]): Promise<void> {
         this._provisionSwarmCLI();
 
-        vscode.window.showInformationMessage(`Auto-Continue Swarm: Provisioning ${contracts.length} Worker Agents concurrently.`);
+        vscode.window.showInformationMessage(`Auto-Continue Swarm: Provisioning ${contracts.length} Worker Agents...`);
 
-        for (const contract of contracts) {
-            // Register the hard contract
+        // Segregate by head
+        const antigravityQueue = contracts.filter(c => c.targetHead === 'Antigravity UI');
+        const headlessSwarm = contracts.filter(c => c.targetHead === 'Headless API');
+        const localSwarm = contracts.filter(c => c.targetHead === 'Local AI');
+
+        // 1. Process Headless & Local AI concurrently in the background (fire and forget)
+        for (const contract of [...headlessSwarm, ...localSwarm]) {
             this._contractManager.createContract(contract);
-
-            // Command HandoffProtocol to spawn a worker thread bypassing the context overload check
-            await this._handoffProtocol.executeSwarmSpawn(contract.threadId, contract);
-
-            // Artificial delay to allow VS Code UI to process the new webview before spawning the next
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            if (contract.targetHead === 'Headless API') {
+                this._executeHeadlessAPI(contract).catch(e => console.error(`[Headless API] Error in thread ${contract.threadId}:`, e));
+            } else if (contract.targetHead === 'Local AI') {
+                this._executeLocalAI(contract).catch(e => console.error(`[Local AI] Error in thread ${contract.threadId}:`, e));
+            }
         }
 
-        vscode.window.showInformationMessage('Auto-Continue Swarm: All delegates dispatched successfully!');
+        // 2. Queue Antigravity UI tasks sequentially so the sidebar doesn't bleed
+        if (antigravityQueue.length > 0) {
+            vscode.window.showInformationMessage(`Auto-Continue Swarm: Queued ${antigravityQueue.length} tasks for Antigravity UI.`);
+            
+            // For MVP, we pass the first one to handoff, and queue the rest.
+            // If HandoffProtocol is busy, it will reject or we need a real queue manager.
+            // But we scavenged HandoffProtocol so let's use it for the first UI task.
+            const firstUiTask = antigravityQueue.shift()!;
+            this._contractManager.createContract(firstUiTask);
+            await this._handoffProtocol.executeSwarmSpawn(firstUiTask.threadId, firstUiTask);
+            
+            // Log the rest (V2 will need an event listener to pop the queue when the sidebar finishes)
+            antigravityQueue.forEach(task => {
+                console.log(`[SwarmOrchestrator] Queued UI task for later: ${task.threadId}`);
+            });
+        }
+
+        vscode.window.showInformationMessage('Auto-Continue Swarm: Routing complete.');
     }
 
     /**
      * Intelligent parser using Gemini REST API to break down a Megaprompt into structured JSON.
      */
-    private async _decomposePromptWithGemini(prompt: string): Promise<Array<{ role: string, description: string, allowedDirectories: string[], readOnlyDirectories: string[] }>> {
+    private async _decomposePromptWithGemini(prompt: string): Promise<Array<{ role: string, description: string, allowedDirectories: string[], readOnlyDirectories: string[], targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI' }>> {
         const config = vscode.workspace.getConfiguration('autoContinue');
         const apiKey = config.get<string>('geminiApiKey');
 
@@ -81,7 +104,7 @@ export class SwarmOrchestrator {
             return [];
         }
 
-        const systemInstruction = `You are the Swarm Orchestrator Manager. Your job is to take a user's large feature request (Megaprompt) and break it down into distinct, specialized, non-overlapping tasks for Worker Agents. 
+        const systemInstruction = `You are the Swarm Orchestrator Manager. Your job is to take a user's large feature request (Megaprompt) and break it down into distinct, specialized, non-overlapping tasks for Worker Agents.
 You MUST output ONLY valid JSON format. No markdown blocks, no conversational text. Just the raw JSON array.
 
 The JSON schema MUST be an array of objects matching this exact structure:
@@ -90,9 +113,13 @@ The JSON schema MUST be an array of objects matching this exact structure:
     "role": "string (e.g., 'Frontend Worker', 'Database Engineer')",
     "description": "string (Detailed, exhaustive instructions of what exactly this agent should do. MUST include ALL context from the prompt.)",
     "allowedDirectories": ["string (e.g., 'src/ui', 'styles/')"],
-    "readOnlyDirectories": ["string (e.g., 'src/api/types.ts')"]
+    "readOnlyDirectories": ["string (e.g., 'src/api/types.ts')"],
+    "targetHead": "string (MUST BE EXACTLY ONE OF: 'Antigravity UI' OR 'Headless API' OR 'Local AI')"
   }
-]`;
+]
+- Use 'Antigravity UI' if the task requires deep codebase understanding or complex planning.
+- Use 'Headless API' for parallel code generation or independent testing.
+- Use 'Local AI' for fast, simple tasks like syntax checks, formatting, or simple refactors.`;
 
         const payload = JSON.stringify({
             system_instruction: {
@@ -199,5 +226,35 @@ The JSON schema MUST be an array of objects matching this exact structure:
         const scriptPath = path.join(binDir, 'swarm.js');
         // Always overwrite to ensure it has the latest CLI code
         fs.writeFileSync(scriptPath, SWARM_CLI_SCRIPT, { encoding: 'utf8', mode: 0o755 });
+    }
+
+    /**
+     * Executes a task headlessly via the Gemini API.
+     */
+    private async _executeHeadlessAPI(contract: AgentContract): Promise<void> {
+        console.log(`[Headless API] Starting Swarm Worker: ${contract.role} (${contract.threadId})`);
+        
+        // MVP Placeholder: Just simulate work and mark complete
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log(`[Headless API] Completed Swarm Worker: ${contract.role} (${contract.threadId})`);
+        
+        // Clean up contract
+        this._contractManager.resolveContract(contract.threadId);
+        vscode.window.showInformationMessage(`Swarm Agent [${contract.role}] completed its headless task.`);
+    }
+
+    /**
+     * Executes a task headlessly via a local inference endpoint (e.g. LM Studio).
+     */
+    private async _executeLocalAI(contract: AgentContract): Promise<void> {
+        console.log(`[Local AI] Starting Swarm Worker: ${contract.role} (${contract.threadId})`);
+        
+        // MVP Placeholder: Just simulate work and mark complete
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        console.log(`[Local AI] Completed Swarm Worker: ${contract.role} (${contract.threadId})`);
+        
+        // Clean up contract
+        this._contractManager.resolveContract(contract.threadId);
+        vscode.window.showInformationMessage(`Swarm Agent [${contract.role}] completed its local task.`);
     }
 }

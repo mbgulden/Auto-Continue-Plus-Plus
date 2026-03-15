@@ -14,9 +14,6 @@ import { SwarmOrchestrator } from './engine/SwarmOrchestrator';
 import { CDPHandler } from './engine/CDPHandler';
 import { SwarmWebview } from './ui/SwarmWebview';
 import * as cp from 'child_process';
-import { BoltOnRegistry } from './boltons/BoltOnRegistry';
-import { ZeroTrustValidator } from './security/ZeroTrustValidator';
-import { UnitTestingBoltOn } from './boltons/impl/UnitTestingBoltOn';
 
 /**
  * Validates the Global Terms of Service at extension startup.
@@ -63,13 +60,6 @@ export async function activate(context: vscode.ExtensionContext) {
     const syncEngine = new SyncEngine(context);
     const cdpHandler = new CDPHandler();
 
-    // Swarm Manager & Bolt-On Architecture
-    const boltOnRegistry = new BoltOnRegistry();
-    const zeroTrustValidator = new ZeroTrustValidator();
-
-    // Register specialized Bolt-Ons
-    boltOnRegistry.register(new UnitTestingBoltOn());
-
     // Initialize UI Features
     const statusBar = new StatusBar(context, stateManager);
     statusBar.setContextTracker(contextTracker); // Link UI to live tracker
@@ -93,10 +83,11 @@ export async function activate(context: vscode.ExtensionContext) {
                 'cline.retry',
                 'continue.retry'
             ];
-            const allCommands = await getCachedCommands();
             for (const cmd of recoveryCommands) {
-                if (allCommands.includes(cmd)) {
+                try {
                     await vscode.commands.executeCommand(cmd);
+                } catch(e: any) {
+                    // Ignore command not found errors during recovery attempt
                 }
             }
         } catch (e) {
@@ -109,29 +100,19 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const watchdog = new Watchdog(stateManager, handleRecovery);
 
-    // Efficiently cache commands to prevent fetching them twice every interval loop
-    let cachedCommands: string[] = [];
-    let lastCommandFetch = 0;
-    const getCachedCommands = async (): Promise<string[]> => {
-        const now = Date.now();
-        // Fetch more frequently (every 10s) to catch newly registered commands when agent is invoked
-        if (now - lastCommandFetch > 10000 || cachedCommands.length === 0) {
-            cachedCommands = await vscode.commands.getCommands(true);
-            lastCommandFetch = now;
-        }
-        return cachedCommands;
-    };
-
-    // Helper to attempt running the accepting commands ensuring the webview can process them
+    // Helper to attempt running the accepting commands directly to bypass fragile command caching.
+    // Relies on VS Code's native command rejection if the extension isn't fully activated yet.
     const executeAcceptCommands = async (commandsList: string[]): Promise<boolean> => {
         let executed = false;
-        const allCommands = await getCachedCommands();
         for (const cmd of commandsList) {
-            if (allCommands.includes(cmd)) {
-                try {
-                    await vscode.commands.executeCommand(cmd);
-                    executed = true;
-                } catch (e) {
+            try {
+                // Blindly execute the command. If the agent webview is active, it handles the event.
+                await vscode.commands.executeCommand(cmd);
+                executed = true;
+            } catch (e: any) {
+                // If the command is truly not found (agent not installed/active), it throws an error.
+                // We ignore "command not found" errors to prevent console spam.
+                if (e.message && !e.message.includes('not found')) {
                     console.warn(`[Auto-Continue] Native command ${cmd} threw an error:`, e);
                 }
             }
@@ -236,15 +217,7 @@ export async function activate(context: vscode.ExtensionContext) {
     };
 
     // Initialize Core Engine
-    const pollingEngine = new PollingEngine(
-        context,
-        stateManager,
-        handleFileAccept,
-        handleTerminalAccept,
-        cdpHandler,
-        boltOnRegistry,
-        zeroTrustValidator
-    );
+    const pollingEngine = new PollingEngine(context, stateManager, handleFileAccept, handleTerminalAccept, cdpHandler);
 
     // Bind the context health check directly to the polling interval
     pollingEngine.setContextHealthCheck(async () => {
@@ -259,10 +232,11 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     // Register Commands
-    const toggleCommand = vscode.commands.registerCommand('auto-continue.toggle', () => {
+    const toggleCommand = vscode.commands.registerCommand('auto-continue.toggle', async () => {
+        // Enforce TOS on demand if they haven't agreed yet
         if (!context.globalState.get('autoContinue.globalTOSAgreed', false)) {
-            vscode.window.showErrorMessage('You must agree to the Terms of Service. Please reload the window.');
-            return;
+            const agreed = await checkGlobalTOS(context);
+            if (!agreed) return; // User declined, abort
         }
 
         stateManager.toggleActive();
@@ -299,7 +273,9 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage('You must agree to the Terms of Service to use the Swarm.');
             return;
         }
-        SwarmWebview.createOrShow(swarmOrchestrator);
+        // In the MVP, we just show the state manager stats
+        const tosAgreed = context.globalState.get<boolean>('autoContinue.globalTOSAgreed', false);
+        SwarmWebview.createOrShow(stateManager, tosAgreed);
     });
 
     const enableCDPCommand = vscode.commands.registerCommand('auto-continue.enableCDP', async () => {

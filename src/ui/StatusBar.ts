@@ -7,6 +7,7 @@ export class StatusBar implements vscode.Disposable {
     private _dashboardItem: vscode.StatusBarItem;
     private _settingsItem: vscode.StatusBarItem;
     private _cdpItem: vscode.StatusBarItem;
+    private _swarmItem: vscode.StatusBarItem;
     private _stateManager: StateManager;
     private _contextTracker?: ContextTracker;
     private _contextHealthDisposable?: vscode.Disposable;
@@ -35,7 +36,13 @@ export class StatusBar implements vscode.Disposable {
         this._cdpItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
         this._cdpItem.command = 'auto-continue.enableCDP';
 
-        context.subscriptions.push(this._statusBarItem, this._dashboardItem, this._settingsItem, this._cdpItem);
+        // Create Swarm Manager quick-access item
+        this._swarmItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
+        this._swarmItem.command = 'auto-continue.swarm.spawnDelegates';
+        this._swarmItem.text = `$(hub)`;
+        this._swarmItem.tooltip = 'Open Swarm Manager Dashboard';
+
+        context.subscriptions.push(this._statusBarItem, this._dashboardItem, this._settingsItem, this._cdpItem, this._swarmItem);
 
         // Initial update
         this.update();
@@ -112,6 +119,7 @@ export class StatusBar implements vscode.Disposable {
         this._dashboardItem.show();
         this._settingsItem.show();
         this._cdpItem.show();
+        this._swarmItem.show();
     }
 
     public dispose() {
@@ -122,5 +130,6 @@ export class StatusBar implements vscode.Disposable {
         this._dashboardItem.dispose();
         this._settingsItem.dispose();
         this._cdpItem.dispose();
+        this._swarmItem.dispose();
     }
 }

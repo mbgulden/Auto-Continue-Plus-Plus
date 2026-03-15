@@ -14,6 +14,8 @@ import { SwarmOrchestrator } from './engine/SwarmOrchestrator';
 import { CDPHandler } from './engine/CDPHandler';
 import { SwarmWebview } from './ui/SwarmWebview';
 import * as cp from 'child_process';
+import { BoltOnRegistry } from './boltons/BoltOnRegistry';
+import { ZeroTrustValidator } from './security/ZeroTrustValidator';
 
 /**
  * Validates the Global Terms of Service at extension startup.
@@ -47,11 +49,8 @@ async function checkGlobalTOS(context: vscode.ExtensionContext): Promise<boolean
  * Extension entry point.
  * This method is called when the extension is activated.
  */
-export async function activate(context: vscode.ExtensionContext) {
+export function activate(context: vscode.ExtensionContext) {
     console.log('Auto-Continue Plus Plus is now initializing.');
-
-    // Enforce Global TOS before enabling the extension
-    const tosAgreed = await checkGlobalTOS(context);
 
     // Initialize Security and State
     const stateManager = new StateManager(context);
@@ -69,6 +68,10 @@ export async function activate(context: vscode.ExtensionContext) {
     const handoffProtocol = new HandoffProtocol(stateManager, contextTracker, contractManager, cdpHandler);
     const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager);
 
+    // Initialize Bolt-On Infrastructure
+    const zeroTrustValidator = new ZeroTrustValidator();
+    const boltOnRegistry = new BoltOnRegistry();
+
     // Provide initial UI state for CDP
     cdpHandler.isCDPAvailable().then(isActive => statusBar.setCdpStatus(isActive));
 
@@ -77,16 +80,17 @@ export async function activate(context: vscode.ExtensionContext) {
         console.warn('[Auto-Continue] Executing Recovery Protocol...');
 
         try {
-            // Attempt to trigger common retry/wake-up commands
+            // Attempt to trigger common retry/wake-up commands blindly
             const recoveryCommands = [
                 'antigravity.retry',
                 'cline.retry',
                 'continue.retry'
             ];
-            const allCommands = await getCachedCommands();
             for (const cmd of recoveryCommands) {
-                if (allCommands.includes(cmd)) {
+                try {
                     await vscode.commands.executeCommand(cmd);
+                } catch (e: any) {
+                    // Ignore not found silently
                 }
             }
         } catch (e) {
@@ -99,30 +103,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const watchdog = new Watchdog(stateManager, handleRecovery);
 
-    // Efficiently cache commands to prevent fetching them twice every interval loop
-    let cachedCommands: string[] = [];
-    let lastCommandFetch = 0;
-    const getCachedCommands = async (): Promise<string[]> => {
-        const now = Date.now();
-        // Fetch more frequently (every 10s) to catch newly registered commands when agent is invoked
-        if (now - lastCommandFetch > 10000 || cachedCommands.length === 0) {
-            cachedCommands = await vscode.commands.getCommands(true);
-            lastCommandFetch = now;
-        }
-        return cachedCommands;
-    };
-
     // Helper to attempt running the accepting commands ensuring the webview can process them
     const executeAcceptCommands = async (commandsList: string[]): Promise<boolean> => {
         let executed = false;
-        const allCommands = await getCachedCommands();
         for (const cmd of commandsList) {
-            if (allCommands.includes(cmd)) {
-                try {
-                    await vscode.commands.executeCommand(cmd);
-                    executed = true;
-                } catch (e) {
-                    console.warn(`[Auto-Continue] Native command ${cmd} threw an error:`, e);
+            try {
+                await vscode.commands.executeCommand(cmd);
+                executed = true;
+            } catch (e: any) {
+                // Silently ignore "command not found" errors as extensions lazily load,
+                // but log other potential issues if necessary.
+                if (e && e.message && !e.message.includes('not found')) {
+                    console.debug(`[Auto-Continue] Command ${cmd} failed:`, e.message);
                 }
             }
         }
@@ -240,10 +232,9 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // Register Commands
-    const toggleCommand = vscode.commands.registerCommand('auto-continue.toggle', () => {
-        if (!context.globalState.get('autoContinue.globalTOSAgreed', false)) {
-            vscode.window.showErrorMessage('You must agree to the Terms of Service. Please reload the window.');
+    const toggleCommand = vscode.commands.registerCommand('auto-continue.toggle', async () => {
+        const agreed = await checkGlobalTOS(context);
+        if (!agreed) {
             return;
         }
 
@@ -277,11 +268,12 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     const spawnSwarmCommand = vscode.commands.registerCommand('auto-continue.swarm.spawnDelegates', async () => {
-        if (!context.globalState.get('autoContinue.globalTOSAgreed', false)) {
+        const agreed = await checkGlobalTOS(context);
+        if (!agreed) {
             vscode.window.showErrorMessage('You must agree to the Terms of Service to use the Swarm.');
             return;
         }
-        SwarmWebview.createOrShow(swarmOrchestrator);
+        SwarmWebview.createOrShow(swarmOrchestrator, stateManager, boltOnRegistry);
     });
 
     const enableCDPCommand = vscode.commands.registerCommand('auto-continue.enableCDP', async () => {
@@ -345,26 +337,29 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // If enabled on startup AND agreed to TOS, start engines immediately
-    if (stateManager.isActive && tosAgreed) {
-        pollingEngine.start();
-        watchdog.start();
-    }
+    // Start the process asynchronously so we don't block extension activation
+    checkGlobalTOS(context).then(tosAgreed => {
+        // If enabled on startup AND agreed to TOS, start engines immediately
+        if (stateManager.isActive && tosAgreed) {
+            pollingEngine.start();
+            watchdog.start();
+        }
 
-    // Set up a background timer for Continuous Sync (every 5 minutes)
-    if (tosAgreed) {
-        // Run an initial sync immediately upon load
-        syncEngine.runContinuousSync();
+        // Set up a background timer for Continuous Sync (every 5 minutes)
+        if (tosAgreed) {
+            // Run an initial sync immediately upon load
+            syncEngine.runContinuousSync();
 
-        const SYNC_INTERVAL_MS = 5 * 60 * 1000;
-        const syncInterval = setInterval(() => {
-            if (stateManager.isActive) {
-                syncEngine.runContinuousSync();
-            }
-        }, SYNC_INTERVAL_MS);
+            const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+            const syncInterval = setInterval(() => {
+                if (stateManager.isActive) {
+                    syncEngine.runContinuousSync();
+                }
+            }, SYNC_INTERVAL_MS);
 
-        context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
-    }
+            context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
+        }
+    });
 }
 
 export function deactivate() {

@@ -16,17 +16,17 @@ Instead, **lean heavily into the VS Code / Google Antigravity environment.**
 ## Architecture: The "Additive Bolt-On" Approach
 To build something truly useful and avoid the traps of OpenClaw, the system must be modular, strongly typed, and verifiable.
 
-### 1. Hybrid AI Processing (Cost & Speed Optimization)
-Avoid OpenClaw's mistake of routing everything to expensive models.
-- **Local AI (The Router & Enforcer):** Use lightweight, fast local models (or cheap API endpoints) strictly for:
-  - Intent classification (Which sub-agent should handle this?).
-  - Syntax checking and "Hard Contract Enforcement" (Did the agent return JSON as requested?).
-  - Handoff readiness validation.
-- **Google Antigravity / Gemini (The Heavy Lifters):** Reserve the frontier models for complex codebase refactoring, architectural planning, and deep debugging.
+### 1. Hybrid AI Processing & Tiered Intelligence Router (Cost & Speed Optimization)
+Avoid OpenClaw's mistake of routing everything to expensive models. Implement an "always-on" Swarm Orchestrator that continuously acts as a context filter and task router, dumbing down prompts for local hardware while reserving context for heavy models:
+- **Tier 3 (Local/Always On):** Fast, free models running on local AI hardware (e.g., Llama 3 via LM Studio or Ollama). Used strictly for routine tasks: intent classification, syntax checking, extracting variables, formatting JSON.
+- **Tier 2 (Metered API):** Cheap, fast cloud models. Used for generating basic boilerplate, writing simple unit tests, or CRUD endpoints.
+- **Tier 1 (Google Antigravity / Jules / Gemini Advanced):** Expensive, heavy reasoning models. Reserved strictly for complex codebase refactoring, high-level architectural design, and deep debugging, kicking in when lower tiers fail.
 
-### 2. Strict Swarm Contracts (Anti-"Quiet Failure")
-OpenClaw fails quietly because it trusts the agent's self-assessment. Auto-Continue Plus Plus must implement **Zero-Trust Verification**.
-- Every tool or "bolt-on" must have a defined `pre-condition` and `post-condition`.
+### 2. Strict Swarm Contracts & "Proof of Work" (Anti-"Quiet Failure")
+OpenClaw fails quietly because it trusts the agent's self-assessment. Auto-Continue Plus Plus must implement **Zero-Trust Verification** and a **Qualification Standard** for all agents, especially local hardware.
+- Every tool or "bolt-on" must have a strictly typed `pre-condition` and `post-condition`.
+- When an agent (e.g., a Tier 3 Local LLM) returns a result for a task, it undergoes "Proof of Work" schema grading.
+- If the agent hallucinated or returned malformed output, the `ZeroTrustValidator` instantly fails the Qualification Standard for that task, throwing a loud error. If a lower tier fails repeatedly, the Swarm Manager escalates the task to a smarter, paid Tier 1 model.
 - Before the Swarm Manager marks a task as complete, an independent validation step (e.g., running `npm test`, or executing a static analysis check) must occur.
 
 ### 3. Modular "Bolt-On" Registry

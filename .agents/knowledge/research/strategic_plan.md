@@ -48,3 +48,11 @@ Instead of OpenClaw's wild API marketplace, create a strictly typed local regist
 1. Finalize the `Swarm Orchestrator / Global State Manager` designed around hybrid routing.
 2. Implement the `Hard Contract Enforcement` pattern to guarantee safety.
 3. Build the first highly-specialized "Bolt-on" (e.g., a dedicated Unit Testing Agent) to prove the concept.
+
+### Phase 5: Agent Manager Pro Vision
+To evolve the MVP dashboard into the ultimate command center:
+1. **Real-Time Data Streaming:** Eliminate "quiet stalls" by streaming execution logs directly into the Webview.
+2. **Autonomous Scheduling:** A internal calendar/cron-system for repetitive AI tasks.
+3. **Local AI Ecosystem Sync:** Seamlessly detect and list local models (LM Studio, Ollama) directly in the UI for rapid selection.
+4. **Context & Memory Limits Tracking:** Track task context limits. If a local model approaches its hallucination limit, automatically dump state and summarize before continuing.
+5. **Interactive UI Controls:** Provide an "Emergency Brakes" toggle, edit active prompts, and inject human "nudges" mid-execution.

@@ -40,14 +40,41 @@
         return docs;
     };
 
+    const PANEL_SELECTORS = [
+        '#antigravity\\.agentPanel',
+        '#workbench\\.parts\\.auxiliarybar',
+        '.auxiliary-bar-container',
+        '#workbench\\.parts\\.sidebar'
+    ];
+
+    const getAgentPanels = (doc) => {
+        const panels = [];
+        for (const selector of PANEL_SELECTORS) {
+            try {
+                const els = Array.from(doc.querySelectorAll(selector));
+                for (const el of els) {
+                    if (el && el.offsetWidth > 0 && el.offsetHeight > 0) {
+                        panels.push(el);
+                    }
+                }
+            } catch (e) {}
+        }
+        return panels.length > 0 ? panels : [doc];
+    };
+
     const queryAll = (selector) => {
         const results = [];
         getDocuments().forEach(doc => {
             try {
-                results.push(...Array.from(doc.querySelectorAll(selector)));
+                // To avoid clicking on buttons outside the agent panel, 
+                // we restrict the search to the agent panel DOM trees.
+                const panels = getAgentPanels(doc);
+                for (const panel of panels) {
+                    results.push(...Array.from(panel.querySelectorAll(selector)));
+                }
             } catch (e) { }
         });
-        return results;
+        return [...new Set(results)]; // Deduplicate just in case
     };
 
     // =================================================================
@@ -256,7 +283,7 @@
     const SUMMARY_BUTTON_ID = '__autoAcceptSummaryButton';
     const SUMMARY_STATUS_ID = '__autoAcceptSummaryStatus';
     const SUMMARY_BODY_ID = '__autoAcceptSummaryBody';
-    const PANEL_SELECTORS = [
+    const PANEL_SELECTORS_BG = [
         '#antigravity\\.agentPanel',
         '#workbench\\.parts\\.auxiliarybar',
         '.auxiliary-bar-container',
@@ -430,7 +457,7 @@
     }
 
     function findAgentPanel() {
-        for (const selector of PANEL_SELECTORS) {
+        for (const selector of PANEL_SELECTORS_BG) {
             const found = queryAll(selector).find(p => p.offsetWidth > 50 && p.offsetHeight > 50);
             if (found) return found;
         }
@@ -528,7 +555,7 @@
         document.body.appendChild(overlay);
 
         let panel = null;
-        for (const selector of PANEL_SELECTORS) {
+        for (const selector of PANEL_SELECTORS_BG) {
             const found = queryAll(selector).find(p => p.offsetWidth > 50);
             if (found) {
                 panel = found;

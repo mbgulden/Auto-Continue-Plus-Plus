@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/banner.png" alt="Auto-Continue Plus Plus Banner" />
+  <img src="https://raw.githubusercontent.com/mbgul/Auto-Continue-Plus-Plus/main/images/banner.png" alt="Auto-Continue Plus Plus Banner" />
 </div>
 
 <h1 align="center">Auto-Continue Plus Plus</h1>
@@ -18,20 +18,23 @@
 
 <br>
 
-**Auto-Continue Plus Plus** is a premium, high-performance VS Code extension designed to supercharge your AI coding assistants. Say goodbye to constantly hitting "Accept" in the terminal—this agent handles it for you, across multiple tabs, with built-in recovery systems to ensure you never get stuck.
+**Auto-Continue Plus Plus** is a premium, high-performance VS Code extension designed specifically to supercharge **Google Antigravity**. Say goodbye to constantly hitting "Accept" in the terminal—this agent handles it for you, across multiple tabs, with built-in recovery systems to ensure you never get stuck.
 
 ## ✨ Features
 
+- **Built specifically for Google Antigravity**: Seamless integration with the advanced AI agent for relentless coding automation.
 - **Relentless Auto-Accept Loop**: Continuously interacts with AI commands so you don't have to manually intervene.
+- **AI Hallucination Protection**: Advanced Token Tracking and Context Memory actively monitor your agent's context window, protecting your project from destructive AI hallucinations when context limits are reached.
 - **True Multi-Tab Tracking**: Automatically monitors and manages different terminals concurrently.
+- **Non-Destructive Sync Workflow**: Perfect for multi-user or multi-computer setups. Conversation and chat files are continuously synced across your workspace dynamically without data loss.
 - **Intelligent Watchdog Recovery**: Automatically detects and recovers from stuck or hanging commands.
 - **Command Banning**: Protect your environment by preventing the auto-execution of specific, sensitive commands.
 - **Lineage Dashboard**: Unprecedented visibility into your agent's execution history. (Coming soon)
 
 ## 🚀 Getting Started
 
-> **Note:** Please add a high-quality GIF or WebM here demonstrating the extension auto-accepting commands seamlessly.
-> `![Demo](images/demo.gif)`
+> **Note:** Here is a demonstration of the extension in action:
+> ![Demo](https://raw.githubusercontent.com/mbgul/Auto-Continue-Plus-Plus/main/images/demo.png)
 
 1. **Install** the extension from the VS Code Marketplace.
 2. Open the command palette (`Ctrl+Shift+P` or `Cmd+Shift+P`).

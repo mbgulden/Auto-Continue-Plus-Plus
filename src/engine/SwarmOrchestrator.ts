@@ -70,9 +70,15 @@ export class SwarmOrchestrator {
             this._contractManager.createContract(contract);
 
             if (contract.targetHead === 'Headless API') {
-                this._executeHeadlessAPI(contract).catch(e => console.error(`[Headless API] Error in thread ${contract.threadId}:`, e));
+                this._executeHeadlessAPI(contract).catch(e => {
+                    console.error(`[Headless API] Error in thread ${contract.threadId}:`, e);
+                    vscode.window.showErrorMessage(`[Headless API Error] ${contract.role}: ${e.message}`);
+                });
             } else if (contract.targetHead === 'Local AI') {
-                this._executeLocalAI(contract).catch(e => console.error(`[Local AI] Error in thread ${contract.threadId}:`, e));
+                this._executeLocalAI(contract).catch(e => {
+                    console.error(`[Local AI] Error in thread ${contract.threadId}:`, e);
+                    vscode.window.showErrorMessage(`[Local AI Error] ${contract.role}: ${e.message}`);
+                });
             }
         }
 
@@ -286,6 +292,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
 
         if (!apiKey) {
             console.error('[Headless API] Gemini API Key is missing.');
+            vscode.window.showErrorMessage('[Headless API] Failed to start Swarm Worker: Gemini API Key is missing.');
             return;
         }
 
@@ -295,7 +302,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
         // Map BoltOns to Gemini Tools
         const allBoltOns = this._boltOnRegistry.getAll();
         const geminiTools = [{
-            function_declarations: allBoltOns.map(boltOn => {
+            functionDeclarations: allBoltOns.map(boltOn => {
                 let schema;
                 if (boltOn.id === 'file_reader_writer') {
                     schema = {
@@ -338,7 +345,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
             'gemini-1.5-flash-8b'
         ];
 
-        let history: any[] = [];
+        let history: any[] = [{ role: "user", parts: [{ text: "Begin execution." }] }];
         let maxIterations = 15;
         let iteration = 0;
 
@@ -395,6 +402,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
 
             if (!success || !modelResponse) {
                 console.error(`[Headless API] Swarm Thread ${contract.threadId} failed: All fallback models exhausted.`);
+                vscode.window.showErrorMessage(`[Headless API] Swarm Worker ${contract.role} failed: All API fallback models exhausted.`);
                 break;
             }
 
@@ -448,6 +456,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
                         });
                     } catch (e: any) {
                         console.error(`[Headless API] Tool execution failed: ${e.message}`);
+                        vscode.window.showErrorMessage(`[Headless API] Tool execution failed for ${contract.role}: ${e.message}`);
                         history.push({
                             role: "function",
                             parts: [{

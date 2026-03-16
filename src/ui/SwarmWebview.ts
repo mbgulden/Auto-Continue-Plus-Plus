@@ -6,6 +6,16 @@ import { BoltOnRegistry } from '../boltons/BoltOnRegistry';
 export class SwarmWebview {
     public static currentPanel: SwarmWebview | undefined;
     private readonly _panel: vscode.WebviewPanel;
+
+    private _escapeHtml(unsafe: string): string {
+        if (!unsafe) return '';
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
     private _disposables: vscode.Disposable[] = [];
 
     // Dependencies

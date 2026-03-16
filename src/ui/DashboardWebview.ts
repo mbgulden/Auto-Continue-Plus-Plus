@@ -9,6 +9,16 @@ export class DashboardWebview {
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
 
+    public static escapeHtml(unsafe: string): string {
+        if (!unsafe) return '';
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     private constructor(panel: vscode.WebviewPanel, stateManager: StateManager, contextTracker: ContextTracker) {
         this._panel = panel;
         this._update(stateManager, contextTracker);
@@ -208,9 +218,9 @@ export class DashboardWebview {
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div style="flex-grow: 1; padding-right: 15px;">
                             <p style="margin: 0; line-height: 1.4; font-size: 1.05em;">
-                                💬 <a href="#" class="thread-link" onclick="openBrainFolder('${conv.id}')" title="Click to reveal Antigravity Brain folder"><b>${conv.title}</b></a>
+                                💬 <a href="#" class="thread-link" onclick="openBrainFolder('${DashboardWebview.escapeHtml(conv.id)}')" title="Click to reveal Antigravity Brain folder"><b>${DashboardWebview.escapeHtml(conv.title)}</b></a>
                             </p>
-                            <p style="margin: 4px 0 0 0; font-size: 0.75em; opacity: 0.6; font-family: monospace;">ID: ${conv.id}</p>
+                            <p style="margin: 4px 0 0 0; font-size: 0.75em; opacity: 0.6; font-family: monospace;">ID: ${DashboardWebview.escapeHtml(conv.id)}</p>
                         </div>
                         <div style="text-align: right; white-space: nowrap;">
                             ${idleWarning}
@@ -258,7 +268,7 @@ export class DashboardWebview {
                 html += `
                 <div class="node-child ${hideClass}" style="${isHidden} border-left: 2px solid var(--vscode-widget-border); padding-left: 15px; margin-top: 8px; margin-bottom: 8px;">
                     <p style="margin: 0; line-height: 1.8;">
-                        ↳ 🌱 💬 <a href="#" class="thread-link" onclick="openBrainFolder('${conv.id}')" title="Click to reveal Antigravity Brain folder"><b>${conv.title}</b></a>
+                        ↳ 🌱 💬 <a href="#" class="thread-link" onclick="openBrainFolder('${DashboardWebview.escapeHtml(conv.id)}')" title="Click to reveal Antigravity Brain folder"><b>${DashboardWebview.escapeHtml(conv.title)}</b></a>
                     </p>
                     <div style="display: flex; justify-content: space-between; font-size: 0.80em; opacity: 0.7; margin-top: 2px;">
                         <span>Last Active: ${new Date(conv.lastModifiedMs).toLocaleString()}</span>

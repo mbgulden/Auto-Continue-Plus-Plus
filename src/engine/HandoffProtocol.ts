@@ -180,8 +180,9 @@ export class HandoffProtocol {
                 } else {
                     await vscode.commands.executeCommand('antigravity.chat.new');
                 }
-            } catch (e) {
-                vscode.window.showWarningMessage('Could not automatically open new Antigravity chat. Please open one manually.');
+            } catch (e: any) {
+                console.error('[HandoffProtocol] Failed to open new Antigravity chat:', e);
+                vscode.window.showWarningMessage(`Could not automatically open new Antigravity chat. Error: ${e.message}`);
             }
 
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -296,13 +297,25 @@ export class HandoffProtocol {
 
                             // Emulate Enter key
                             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                        } else {
+                            console.error('Auto-Continue CDP: Textarea not found for injection');
                         }
                     })();
                 `;
-                await this._cdpHandler.executeGlobalScript(injectScript);
+                try {
+                    await this._cdpHandler.executeGlobalScript(injectScript);
+                } catch (e: any) {
+                    console.error('[HandoffProtocol] CDP script execution failed:', e);
+                    vscode.window.showErrorMessage(`CDP Injection Failed: ${e.message}`);
+                }
             } else {
-                await vscode.env.clipboard.writeText(newThreadPrompt);
-                await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+                try {
+                    await vscode.env.clipboard.writeText(newThreadPrompt);
+                    await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+                } catch (e: any) {
+                    console.error('[HandoffProtocol] Clipboard paste failed:', e);
+                    vscode.window.showErrorMessage(`Clipboard Paste Failed: ${e.message}`);
+                }
             }
 
         } catch (e: any) {

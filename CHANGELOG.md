@@ -4,6 +4,14 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.19] - 2026-03-15
+
+### Fixed
+- **Startup Configuration:** Introduced `autoContinue.enableAtStartup` setting (defaults `false`). It now relies on configs over last-session state.
+- **TOS Deferral:** Extension stays completely quiet and doesn't popup TOS unconditionally at startup.
+- **Improved First-Run Flow:** The TOS verification logic triggers when you explicitly toggle it.
+- **"Don't Show Again" vs "I Agree":** Added permanent and session-level consent management for the TOS prompt.
+
 ## [1.1.6] - 2026-03-10
 
 ### Fixed

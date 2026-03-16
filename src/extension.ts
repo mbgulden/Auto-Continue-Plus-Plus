@@ -19,25 +19,27 @@ import { ZeroTrustValidator } from './security/ZeroTrustValidator';
 import { FileReaderWriterBoltOn } from './boltons/impl/FileReaderWriterBoltOn';
 
 /**
- * Validates the Global Terms of Service at extension startup.
+ * Validates the Global Terms of Service.
  * @param context The extension context to read global state from.
  * @returns {Promise<boolean>} True if the user consented, false otherwise.
  */
 async function checkGlobalTOS(context: vscode.ExtensionContext): Promise<boolean> {
     const TOS_KEY = 'autoContinue.globalTOSAgreed';
-    const hasAgreed = context.globalState.get<boolean>(TOS_KEY, false);
+    const hasAgreedForever = context.globalState.get<boolean>(TOS_KEY, false);
 
-    if (hasAgreed) return true;
+    if (hasAgreedForever) return true;
 
     // Extract dynamic version from package.json
     const extensionVersion = context.extension.packageJSON.version || "Unknown";
 
     const tosMessage = `[Auto-Continue Plus Plus v${extensionVersion}] By using this extension, you acknowledge that it actively automates AI actions, automatically accepts diffs on your behalf, and seamlessly synchronizes AI conversation data across your workspace to support multi-environment roaming. The author is not liable for data loss or unintended AI agent behavior. Do you agree to these terms?`;
 
-    const selection = await vscode.window.showWarningMessage(tosMessage, "I Agree", "Decline");
+    const selection = await vscode.window.showWarningMessage(tosMessage, "I Agree", "Don't Show Again", "Decline");
 
-    if (selection === "I Agree") {
+    if (selection === "Don't Show Again") {
         await context.globalState.update(TOS_KEY, true);
+        return true;
+    } else if (selection === "I Agree") {
         return true;
     }
 
@@ -239,9 +241,12 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     const toggleCommand = vscode.commands.registerCommand('auto-continue.toggle', async () => {
-        const agreed = await checkGlobalTOS(context);
-        if (!agreed) {
-            return;
+        if (!stateManager.isActive) {
+            // Turning ON - must check TOS every time (unless "Don't Show Again" was previously checked)
+            const agreed = await checkGlobalTOS(context);
+            if (!agreed) {
+                return;
+            }
         }
 
         stateManager.toggleActive();
@@ -250,6 +255,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (stateManager.isActive) {
             pollingEngine.start();
             watchdog.start();
+            syncEngine.runContinuousSync();
         } else {
             pollingEngine.stop();
             watchdog.stop();
@@ -343,29 +349,29 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Start the process asynchronously so we don't block extension activation
-    checkGlobalTOS(context).then(tosAgreed => {
-        // If enabled on startup AND agreed to TOS, start engines immediately
-        if (stateManager.isActive && tosAgreed) {
-            pollingEngine.start();
-            watchdog.start();
-        }
+    // Decide startup state based on enableAtStartup config
+    if (stateManager.isActive) {
+        // Only start if they agree to TOS
+        checkGlobalTOS(context).then(tosAgreed => {
+            if (tosAgreed) {
+                pollingEngine.start();
+                watchdog.start();
+                syncEngine.runContinuousSync();
+            } else {
+                stateManager.forceState(false);
+                statusBar.update();
+            }
+        });
+    }
 
-        // Set up a background timer for Continuous Sync (every 5 minutes)
-        if (tosAgreed) {
-            // Run an initial sync immediately upon load
+    // The interval is always running but only does work when active
+    const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+    const syncInterval = setInterval(() => {
+        if (stateManager.isActive) {
             syncEngine.runContinuousSync();
-
-            const SYNC_INTERVAL_MS = 5 * 60 * 1000;
-            const syncInterval = setInterval(() => {
-                if (stateManager.isActive) {
-                    syncEngine.runContinuousSync();
-                }
-            }, SYNC_INTERVAL_MS);
-
-            context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
         }
-    });
+    }, SYNC_INTERVAL_MS);
+    context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
 }
 
 export function deactivate() {

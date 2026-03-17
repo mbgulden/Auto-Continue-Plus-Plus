@@ -215,24 +215,24 @@
         const evalText = textContent.length > 0 ? textContent : ariaLabel;
         if (evalText.length === 0 || evalText.length > 50) return false;
 
-        // 3. Fallback reject pattern check (only if visible text isn't explicitly an accept pattern)
-        let isSpecificallyAccept = acceptPatterns.some(ap => textContent.includes(ap));
-        
-        if (!isSpecificallyAccept) {
-            for (const rp of rejectPatterns) {
-                if (evalText.includes(rp)) {
-                    // It's a reject button or dropdown
-                    return false;
-                }
+        // 3. Absolute Reject Pattern Check (takes precedence over ANY partial accept match)
+        for (const rp of rejectPatterns) {
+            if (evalText.includes(rp) || ariaLabel.includes(rp)) {
+                return false;
             }
         }
 
         // 4. Must match at least one accept pattern in either text or aria-label
         let matched = false;
-        for (const ap of acceptPatterns) {
-            if (evalText.includes(ap) || ariaLabel.includes(ap) || classNames.includes(ap.replace(' ', '-'))) { 
-                matched = true; 
-                break; 
+        // Strict exact matches for heavily overloaded words
+        if (evalText === 'run' || evalText === 'accept') {
+            matched = true;
+        } else {
+            for (const ap of acceptPatterns) {
+                if (evalText.includes(ap) || ariaLabel.includes(ap) || classNames.includes(ap.replace(' ', '-'))) { 
+                    matched = true; 
+                    break; 
+                }
             }
         }
         if (!matched) return false;

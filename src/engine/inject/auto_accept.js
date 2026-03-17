@@ -231,8 +231,13 @@
             matched = true;
         } else {
             // Whitelist for specific VS Code / Continue terminal execution expansions
-            if (evalText.includes('step requires input') && evalText.includes('expand')) {
-                matched = true;
+            if (evalText.includes('expand')) {
+                // The "Expand <" button is adjacent to "1 Step Requires Input", check parent containers up to 2 levels deep
+                const pText = (el.parentElement?.textContent || '').toLowerCase();
+                const gpText = (el.parentElement?.parentElement?.textContent || '').toLowerCase();
+                if (pText.includes('requires input') || gpText.includes('requires input')) {
+                    matched = true;
+                }
             } else {
                 for (const ap of acceptPatterns) {
                     if (evalText.includes(ap) || ariaLabel.includes(ap) || classNames.includes(ap.replace(' ', '-'))) { 

@@ -215,10 +215,15 @@
         const evalText = textContent.length > 0 ? textContent : ariaLabel;
         if (evalText.length === 0 || evalText.length > 50) return false;
 
+        // 2.5 Absolute VS Code Whitelist (Overrides reject patterns to prevent "always run" from conflicting with "run")
+        if (evalText.includes('run alt+') || evalText.includes('run ⌘')) {
+            const nearbyText = findNearbyCommandText(el);
+            if (isCommandBanned(nearbyText)) return false;
+            return true;
+        }
+
         // 3. Absolute Reject Pattern Check (takes precedence over ANY partial accept match)
         for (const rp of rejectPatterns) {
-            // CRITICAL: Only check evalText here. If we check ariaLabel, a button explicitly labeled "Run" 
-            // might be rejected just because its aria-label contains a shortcut hint like "(Reject: Escape)".
             if (evalText.includes(rp)) {
                 return false;
             }
@@ -271,10 +276,8 @@
             return false;
         }
         
-        // Some internal spans (like .action-label) have pointer-events: none, but we still want to dispatch to them
-        if (style.pointerEvents === 'none' && !classNames.includes('action-label') && !classNames.includes('codicon')) {
-            return false;
-        }
+        // Removed pointerEvents === 'none' check. If it passed the text checks, it's the button we want!
+        // We trigger el.click() natively anyway which pierces CSS.
 
         return true;
     }

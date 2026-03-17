@@ -4,6 +4,12 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.21] - 2026-03-16
+
+### Fixed
+- **UI QuickPick Polling Stall:** Replaced the blind `await`s on native VS Code fallback commands. Previously, triggering `continue.runTerminalCommand` concurrently generated a "Select Python Interpreter" quickpick, causing VS Code to permanently stall the entire polling engine interval on that promise. Fallback commands are now purely non-blocking.
+- **Explicit CDP Offline Status Warnings:** Added a massive visual pop-up warning when users activate the bot without `--remote-debugging-port=9000` attached to their current VS Code window, removing the "silent failure" ambiguity once and for all.
+
 ## [1.1.20] - 2026-03-16
 
 ### Fixed

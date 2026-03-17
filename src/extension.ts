@@ -113,20 +113,18 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Helper to attempt running the accepting commands ensuring the webview can process them
     const executeAcceptCommands = async (commandsList: string[]): Promise<boolean> => {
-        let executed = false;
+        // We no longer `await` blindly here because some VS Code extensions 
+        // return Promises that hang indefinitely if they pop up a QuickPick UI (e.g. "Select Python Interpreter").
+        // We fire and forget with aggressive catching.
         for (const cmd of commandsList) {
-            try {
-                await vscode.commands.executeCommand(cmd);
-                executed = true;
-            } catch (e: any) {
-                // Silently ignore "command not found" errors as extensions lazily load,
-                // but log other potential issues if necessary.
+            vscode.commands.executeCommand(cmd).then(undefined, (e) => {
+                // Silently ignore command missing errors
                 if (e && e.message && !e.message.includes('not found')) {
                     console.debug(`[Auto-Continue] Command ${cmd} failed:`, e.message);
                 }
-            }
+            });
         }
-        return executed;
+        return false;
     };
 
     // Dynamic File Accept Handler
@@ -135,45 +133,16 @@ export function activate(context: vscode.ExtensionContext) {
         if (handoffProtocol.isHandingOff) return;
 
         try {
+            // We heavily reduced the blind command list to prevent accidental side effects
+            // (like triggering the Python Interpreter selector) from other installed extensions.
             const knownCommands = [
                 // --- Antigravity ---
-                // Native Auto-Accept commands that work even when webview is backgrounded/minified
                 'antigravity.agent.acceptAgentStep',
                 'antigravity.command.accept',
-                'antigravity.prioritized.agentAcceptFocusedHunk',
-
-                // --- Cline ---
-                'cline.acceptAll',
-                'cline.acceptAllFiles',
-                'cline.acceptAllDiffs',
-                'cline.acceptDiff',
-                'cline.acceptTask',
-
-                // --- Roo Code ---
-                'roo-cline.acceptAll',
-                'roo-cline.acceptAllFiles',
-                'roo-cline.acceptAllDiffs',
-                'roo-cline.acceptDiff',
-                'roo-cline.acceptTask',
-
-                // --- Continue ---
-                'continue.acceptAll',
-                'continue.acceptAllDiffs',
-                'continue.acceptDiff',
-
-                // --- Cursor ---
-                'cursor.acceptAll',
-                'cursor.acceptDiff'
+                'antigravity.prioritized.agentAcceptFocusedHunk'
             ];
 
-            const accepted = await executeAcceptCommands(knownCommands);
-
-            if (accepted) {
-                watchdog.ping(); // Agent is alive!
-                contextTracker.markAgentActivity();
-                statusBar.update();
-                stateManager.incrementStat('files');
-            }
+            await executeAcceptCommands(knownCommands);
         } catch (e) { }
     };
 
@@ -186,42 +155,10 @@ export function activate(context: vscode.ExtensionContext) {
                 // --- Antigravity ---
                 'antigravity.terminalCommand.accept',
                 'antigravity.agent.acceptAgentStep',
-                'antigravity.command.accept',
-
-                // --- Cline ---
-                'cline.confirmCommand',
-                'cline.runCommand',
-                'cline.runTerminalCommand',
-                'cline.acceptCommand',
-                'cline.proceed',
-
-                // --- Roo Code ---
-                'roo-cline.confirmCommand',
-                'roo-cline.runCommand',
-                'roo-cline.runTerminalCommand',
-                'roo-cline.acceptCommand',
-                'roo-cline.proceed',
-
-                // --- Continue ---
-                'continue.confirmCommand',
-                'continue.acceptTerminalCommand',
-                'continue.runTerminalCommand',
-
-                // --- Cursor ---
-                'cursor.confirmCommand',
-                'cursor.runCommand'
+                'antigravity.command.accept'
             ];
 
-            const executed = await executeAcceptCommands(knownTerminalCommands);
-
-            if (executed) {
-                watchdog.ping(); // Agent is making moves!
-                contextTracker.markAgentActivity();
-                contextTracker.addEstimatedTokens(100);
-                statusBar.update();
-                stateManager.incrementStat('commands');
-            }
-
+            await executeAcceptCommands(knownTerminalCommands);
         } catch (e) { }
     };
 
@@ -253,6 +190,13 @@ export function activate(context: vscode.ExtensionContext) {
         statusBar.update();
 
         if (stateManager.isActive) {
+            const isCdpAvailable = await cdpHandler.isCDPAvailable();
+            if (!isCdpAvailable && !vscode.env.remoteName) {
+                vscode.window.showWarningMessage('Auto-Continue Warning: Swarm CDP is OFFLINE. The auto-accept feature requires the CDP Debugging tool. Please click "Enable Swarm CDP" in your status bar to restart VS Code locally with the required port.');
+            } else if (!isCdpAvailable && vscode.env.remoteName) {
+                vscode.window.showWarningMessage('Auto-Continue Warning: You are connected via Remote SSH. Please manually restart your LOCAL VS Code window with the "--remote-debugging-port=9000" flag before connecting, or auto-accept will fail.');
+            }
+
             pollingEngine.start();
             watchdog.start();
             syncEngine.runContinuousSync();

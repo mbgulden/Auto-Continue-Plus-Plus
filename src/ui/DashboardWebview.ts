@@ -341,6 +341,14 @@ export class DashboardWebview {
         const globalConversationsHtml = this._generateGlobalConversationsHtml(globalConversations);
         const sparklineSvg = this._generateSvgSparkline(historyData);
 
+        const stateManager = this._panel as any; // Need access to context to get URI
+        const context = require('vscode').workspace.workspaceFolders;
+        // Note: For Phase 5.1, we inject the SPA via script tag.
+        const extensionUri = vscode.extensions.getExtension('mbgulden.auto-continue-plus-plus')?.extensionUri;
+        const scriptUri = extensionUri
+            ? this._panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'DashboardApp.js'))
+            : '';
+
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -349,6 +357,7 @@ export class DashboardWebview {
                 <title>Power User Agent Manager</title>
                 <style>
                     body { font-family: var(--vscode-font-family); padding: 20px; color: var(--vscode-editor-foreground); }
+                    #root { width: 100%; min-height: 200px; border: 1px dashed var(--vscode-editorGroup-border); padding: 10px; margin-bottom: 20px; }
                     .card { background: var(--vscode-editorWidget-background); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--vscode-widget-border); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                     .bar-container { width: 100%; background: var(--vscode-progressBar-background); border-radius: 10px; overflow: hidden; }
                     .bar { height: 100%; transition: width 0.3s; }
@@ -364,6 +373,9 @@ export class DashboardWebview {
                 </style>
             </head>
             <body>
+                <div id="root"></div>
+                <script src="${scriptUri}"></script>
+
                 <h1>Agent Manager <span style="font-size: 0.5em; opacity: 0.5; vertical-align: super;">PRO</span></h1>
 
                 <div class="card" style="border-top: 3px solid var(--vscode-terminal-ansiCyan);">

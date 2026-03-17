@@ -4,14 +4,17 @@
         "target": "ES2022",
         "outDir": "out",
         "lib": [
-            "ES2022"
+            "ES2022",
+            "DOM",
+            "DOM.Iterable"
         ],
         "sourceMap": true,
         "rootDir": "src",
         "strict": true,
         "noImplicitAny": true,
         "strictNullChecks": true,
-        "esModuleInterop": true
+        "esModuleInterop": true,
+        "jsx": "react"
     },
     "exclude": [
         "node_modules",

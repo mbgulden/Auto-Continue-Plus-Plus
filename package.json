@@ -128,7 +128,11 @@
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "dependencies": {
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
         "@types/ws": "^8.18.1",
+        "react": "^19.2.4",
+        "react-dom": "^19.2.4",
         "tiktoken": "^1.0.14",
         "ws": "^8.19.0"
     },

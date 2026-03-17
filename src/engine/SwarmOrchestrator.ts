@@ -8,11 +8,29 @@ import * as path from 'path';
 import * as https from 'https';
 import { BoltOnRegistry } from '../boltons/BoltOnRegistry';
 
+import { DashboardWebview } from '../ui/DashboardWebview';
+
 export class SwarmOrchestrator {
     private _handoffProtocol: HandoffProtocol;
     private _contractManager: ContractManager;
     private _lockManager: SwarmLockManager;
     private _boltOnRegistry: BoltOnRegistry;
+
+    private _broadcastStream(threadId: string, role: string, message: string, type: 'info' | 'error' | 'success' = 'info') {
+        const panel = DashboardWebview.currentPanel?.getWebview();
+        if (panel) {
+            panel.postMessage({
+                command: 'streamLog',
+                log: {
+                    timestamp: Date.now(),
+                    threadId,
+                    role,
+                    message,
+                    type
+                }
+            });
+        }
+    }
 
     constructor(
         handoffProtocol: HandoffProtocol,
@@ -117,18 +135,24 @@ export class SwarmOrchestrator {
                 return;
             }
 
+            let resolved = false;
+            let pollInterval: NodeJS.Timeout;
+
             const watcher = fs.watch(path.dirname(contractPath), (eventType, filename) => {
                 if (eventType === 'rename' && filename === `${task.threadId}.json`) {
-                    if (!fs.existsSync(contractPath)) {
+                    if (!fs.existsSync(contractPath) && !resolved) {
+                        resolved = true;
                         watcher.close();
+                        clearInterval(pollInterval);
                         resolve();
                     }
                 }
             });
 
             // Fallback polling just in case fs.watch misses the event on some platforms
-            const pollInterval = setInterval(() => {
-                if (!fs.existsSync(contractPath)) {
+            pollInterval = setInterval(() => {
+                if (!fs.existsSync(contractPath) && !resolved) {
+                    resolved = true;
                     clearInterval(pollInterval);
                     watcher.close();
                     resolve();
@@ -287,12 +311,15 @@ The JSON schema MUST be an array of objects matching this exact structure:
      */
     private async _executeHeadlessAPI(contract: AgentContract): Promise<void> {
         console.log(`[Headless API] Starting Swarm Worker: ${contract.role} (${contract.threadId})`);
+        this._broadcastStream(contract.threadId, contract.role, 'Started Headless AI Agent.');
+
         const config = vscode.workspace.getConfiguration('autoContinue');
         const apiKey = config.get<string>('geminiApiKey');
 
         if (!apiKey) {
             console.error('[Headless API] Gemini API Key is missing.');
             vscode.window.showErrorMessage('[Headless API] Failed to start Swarm Worker: Gemini API Key is missing.');
+            this._broadcastStream(contract.threadId, contract.role, 'Failed: Missing API Key', 'error');
             return;
         }
 
@@ -419,6 +446,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
                     hasFunctionCall = true;
                     const call = part.functionCall;
                     console.log(`[Headless API] Agent ${contract.role} executing tool: ${call.name}`);
+                    this._broadcastStream(contract.threadId, contract.role, `Executing tool: ${call.name}`);
 
                     try {
                         const boltOn = this._boltOnRegistry.get(call.name);
@@ -443,6 +471,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
                         };
 
                         const result = await boltOn.execute(state);
+                        this._broadcastStream(contract.threadId, contract.role, `Tool returned: ${result.success ? 'Success' : 'Failed'}`);
 
                         // Push function response to history
                         history.push({
@@ -457,6 +486,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
                     } catch (e: any) {
                         console.error(`[Headless API] Tool execution failed: ${e.message}`);
                         vscode.window.showErrorMessage(`[Headless API] Tool execution failed for ${contract.role}: ${e.message}`);
+                        this._broadcastStream(contract.threadId, contract.role, `Tool Error: ${e.message}`, 'error');
                         history.push({
                             role: "function",
                             parts: [{

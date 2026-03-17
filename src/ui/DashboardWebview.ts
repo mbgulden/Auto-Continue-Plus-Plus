@@ -19,6 +19,10 @@ export class DashboardWebview {
             .replace(/'/g, "&#039;");
     }
 
+    public getWebview(): vscode.Webview {
+        return this._panel.webview;
+    }
+
     private constructor(panel: vscode.WebviewPanel, stateManager: StateManager, contextTracker: ContextTracker) {
         this._panel = panel;
         this._update(stateManager, contextTracker);

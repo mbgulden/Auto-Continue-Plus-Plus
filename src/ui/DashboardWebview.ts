@@ -7,6 +7,7 @@ import { AntigravityAPI, ModelQuotaStatus } from '../engine/AntigravityAPI';
 export class DashboardWebview {
     public static currentPanel: DashboardWebview | undefined;
     private readonly _panel: vscode.WebviewPanel;
+    private _stateManager: StateManager;
     private _disposables: vscode.Disposable[] = [];
 
     public static escapeHtml(unsafe: string): string {
@@ -25,6 +26,7 @@ export class DashboardWebview {
 
     private constructor(panel: vscode.WebviewPanel, stateManager: StateManager, contextTracker: ContextTracker) {
         this._panel = panel;
+        this._stateManager = stateManager;
         this._update(stateManager, contextTracker);
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -345,10 +347,9 @@ export class DashboardWebview {
         const globalConversationsHtml = this._generateGlobalConversationsHtml(globalConversations);
         const sparklineSvg = this._generateSvgSparkline(historyData);
 
-        const stateManager = this._panel as any; // Need access to context to get URI
-        const context = require('vscode').workspace.workspaceFolders;
         // Note: For Phase 5.1, we inject the SPA via script tag.
-        const extensionUri = vscode.extensions.getExtension('mbgulden.auto-continue-plus-plus')?.extensionUri;
+        // We retrieve the extensionUri directly from the cached stateManager context
+        const extensionUri = this._stateManager.context.extensionUri;
         const scriptUri = extensionUri
             ? this._panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'DashboardApp.js'))
             : '';

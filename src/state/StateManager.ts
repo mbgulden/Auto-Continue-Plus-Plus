@@ -24,6 +24,10 @@ export interface AutoContinueStats {
 export class StateManager {
     private _isActive: boolean = false;
     private readonly _context: vscode.ExtensionContext;
+
+    public get context(): vscode.ExtensionContext {
+        return this._context;
+    }
     private readonly STATE_KEY = 'autoContinue.isActive';
 
     private _onDidChangeStats = new vscode.EventEmitter<AutoContinueStats>();

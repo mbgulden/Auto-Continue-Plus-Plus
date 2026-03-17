@@ -17,6 +17,7 @@ import * as cp from 'child_process';
 import { BoltOnRegistry } from './boltons/BoltOnRegistry';
 import { ZeroTrustValidator } from './security/ZeroTrustValidator';
 import { FileReaderWriterBoltOn } from './boltons/impl/FileReaderWriterBoltOn';
+import { UnitTestingBoltOn } from './boltons/impl/UnitTestingBoltOn';
 
 /**
  * Validates the Global Terms of Service at extension startup.
@@ -76,7 +77,10 @@ export function activate(context: vscode.ExtensionContext) {
     const fileReaderWriter = new FileReaderWriterBoltOn(contractManager, lockManager);
     boltOnRegistry.register(fileReaderWriter);
 
-    const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager, boltOnRegistry);
+    const unitTestingBoltOn = new UnitTestingBoltOn();
+    boltOnRegistry.register(unitTestingBoltOn);
+
+    const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager, boltOnRegistry, zeroTrustValidator);
 
     // Provide initial UI state for CDP
     cdpHandler.isCDPAvailable().then(isActive => statusBar.setCdpStatus(isActive));

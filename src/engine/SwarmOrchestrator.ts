@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
 import { BoltOnRegistry } from '../boltons/BoltOnRegistry';
+import { ZeroTrustValidator } from '../security/ZeroTrustValidator';
 
 import { DashboardWebview } from '../ui/DashboardWebview';
 
@@ -15,6 +16,7 @@ export class SwarmOrchestrator {
     private _contractManager: ContractManager;
     private _lockManager: SwarmLockManager;
     private _boltOnRegistry: BoltOnRegistry;
+    private _zeroTrustValidator?: ZeroTrustValidator;
 
     private _broadcastStream(threadId: string, role: string, message: string, type: 'info' | 'error' | 'success' = 'info') {
         const panel = DashboardWebview.currentPanel?.getWebview();
@@ -36,12 +38,14 @@ export class SwarmOrchestrator {
         handoffProtocol: HandoffProtocol,
         contractManager: ContractManager,
         lockManager: SwarmLockManager,
-        boltOnRegistry: BoltOnRegistry
+        boltOnRegistry: BoltOnRegistry,
+        zeroTrustValidator?: ZeroTrustValidator
     ) {
         this._handoffProtocol = handoffProtocol;
         this._contractManager = contractManager;
         this._lockManager = lockManager;
         this._boltOnRegistry = boltOnRegistry;
+        this._zeroTrustValidator = zeroTrustValidator;
     }
 
     /**
@@ -470,7 +474,16 @@ The JSON schema MUST be an array of objects matching this exact structure:
                             context: contextObj
                         };
 
+                        if (this._zeroTrustValidator) {
+                            this._zeroTrustValidator.validateExecutionStart(boltOn, state);
+                        }
+
                         const result = await boltOn.execute(state);
+
+                        if (this._zeroTrustValidator) {
+                            this._zeroTrustValidator.validateExecutionEnd(boltOn, result);
+                        }
+
                         this._broadcastStream(contract.threadId, contract.role, `Tool returned: ${result.success ? 'Success' : 'Failed'}`);
 
                         // Push function response to history

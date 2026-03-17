@@ -217,7 +217,9 @@
 
         // 3. Absolute Reject Pattern Check (takes precedence over ANY partial accept match)
         for (const rp of rejectPatterns) {
-            if (evalText.includes(rp) || ariaLabel.includes(rp)) {
+            // CRITICAL: Only check evalText here. If we check ariaLabel, a button explicitly labeled "Run" 
+            // might be rejected just because its aria-label contains a shortcut hint like "(Reject: Escape)".
+            if (evalText.includes(rp)) {
                 return false;
             }
         }
@@ -1231,40 +1233,15 @@
     };
 
     // --- VISUAL UI DEBUGGER (Floating Panel) ---
-    function initVisualDebugger() {
-        if (document.getElementById('acpp-debug-panel')) return;
-        const panel = document.createElement('div');
-        panel.id = 'acpp-debug-panel';
-        Object.assign(panel.style, {
-            position: 'fixed', bottom: '10px', left: '10px',
-            background: 'rgba(0,0,0,0.85)', color: '#00ffcc',
-            border: '2px solid #00ffcc', padding: '10px',
-            zIndex: '999999999', fontSize: '11px', fontFamily: 'monospace',
-            maxWidth: '400px', maxHeight: '200px', overflowY: 'auto',
-            pointerEvents: 'none'
-        });
-        document.body.appendChild(panel);
-    }
+    // (Removed per user request)
     
     function uiLog(msg) {
         log(msg); // keep console
-        const panel = document.getElementById('acpp-debug-panel');
-        if (panel) {
-            const line = document.createElement('div');
-            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            panel.appendChild(line);
-            panel.scrollTop = panel.scrollHeight;
-            if (panel.childNodes.length > 20) panel.removeChild(panel.firstChild);
-        }
     }
 
     window.__autoAcceptStart = function (config) {
-        // VISUAL PING: Prove that CDP injection works seamlessly.
         try {
-            document.body.style.border = "8px solid #ff00ff";
-            document.body.style.boxSizing = "border-box";
-            initVisualDebugger();
-            uiLog("auto_accept.js starting in " + (window.location.href || 'unknown'));
+            // Removed visual ping border
         } catch (e) {}
 
         const state = window.__autoAcceptState;

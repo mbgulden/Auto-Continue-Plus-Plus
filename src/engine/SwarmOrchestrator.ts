@@ -302,7 +302,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
         // Map BoltOns to Gemini Tools
         const allBoltOns = this._boltOnRegistry.getAll();
         const geminiTools = [{
-            functionDeclarations: allBoltOns.map(boltOn => {
+            function_declarations: allBoltOns.map(boltOn => {
                 let schema;
                 if (boltOn.id === 'file_reader_writer') {
                     schema = {

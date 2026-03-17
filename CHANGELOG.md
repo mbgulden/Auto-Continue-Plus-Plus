@@ -4,6 +4,13 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.22] - 2026-03-16
+
+### Added
+- **Shadow DOM Bypassing:** The CDP `auto-accept` payload now natively pierces complex web components (like `<vscode-button>` and `.monaco-button`), solving silent click failures inside isolated UI trees like Antigravity.
+- **Transparent Overlay Piercing:** The scraper now uses `document.elementFromPoint(cx,cy)` to detect invisible blockers over the Accept buttons. It temporarily disables their `pointer-events`, fires synthetic `PointerEvent` and `MouseEvent` blocks, and restores the overlay to guarantee click delivery.
+- **Enter Key Fallback Safety:** If pointer clicking fails to dismiss a button within 300ms, the bot now falls back to forcing `.focus()` and dispatching a synthetic `Enter` KeyboardEvent natively.
+
 ## [1.1.21] - 2026-03-16
 
 ### Fixed

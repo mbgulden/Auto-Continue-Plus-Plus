@@ -62,15 +62,30 @@
         return panels.length > 0 ? panels : [doc];
     };
 
+    function findElementsPiercingShadow(root, selector, result = []) {
+        try {
+            const nodes = Array.from(root.querySelectorAll(selector));
+            result.push(...nodes);
+        } catch(e) {}
+
+        try {
+            const allElements = root.querySelectorAll('*');
+            for (const el of allElements) {
+                if (el.shadowRoot) {
+                    findElementsPiercingShadow(el.shadowRoot, selector, result);
+                }
+            }
+        } catch(e) {}
+        return result;
+    }
+
     const queryAll = (selector) => {
         const results = [];
         getDocuments().forEach(doc => {
             try {
-                // To avoid clicking on buttons outside the agent panel,
-                // we restrict the search to the agent panel DOM trees.
                 const panels = getAgentPanels(doc);
                 for (const panel of panels) {
-                    results.push(...Array.from(panel.querySelectorAll(selector)));
+                    findElementsPiercingShadow(panel, selector, results);
                 }
             } catch (e) { }
         });
@@ -194,32 +209,45 @@
         if (text.length === 0 || text.length > 50) return false;
 
         for (const rp of rejectPatterns) {
-            if (text.indexOf(rp) !== -1) return false;
+            if (text.indexOf(rp) !== -1) {
+                return false;
+            }
         }
         let matched = false;
         for (const ap of acceptPatterns) {
             if (text.indexOf(ap) !== -1) { matched = true; break; }
         }
-        if (!matched) return false;
+        if (!matched) {
+            return false;
+        }
 
         // Check banned commands for run/execute buttons
         if (text.includes('run') || text.includes('execute')) {
             const nearbyText = findNearbyCommandText(el);
-            if (isCommandBanned(nearbyText)) return false;
+            if (isCommandBanned(nearbyText)) {
+                log(`[REJECTED] Command Banned: "${text}" Nearby: "${nearbyText.substring(0,30)}..."`);
+                return false;
+            }
         }
 
         const style = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
-        return style.display !== 'none' && rect.width > 0 && style.pointerEvents !== 'none' && !el.disabled;
+        
+        if (style.display === 'none' || rect.width === 0 || style.pointerEvents === 'none' || el.disabled) {
+            log(`[REJECTED] Hidden or Disabled. Text: "${text}" W:${rect.width} PE:${style.pointerEvents}`);
+            return false;
+        }
+
+        return true;
     }
 
     function getButtonSelectors() {
         const state = window.__autoAcceptState;
         const ide = state ? state.ide : 'cursor';
         if (ide === 'antigravity') {
-            return ['button', 'vscode-button', '.bg-ide-button-background', 'button.bg-primary', 'button.rounded-l', '[class*="button"]', '.codicon', '.action-label'];
+            return ['button', 'vscode-button', '[role="button"]', '.monaco-button', '.monaco-text-button', '.bg-ide-button-background', 'button.bg-primary', 'button.rounded-l', '[class*="button"]', '.codicon', '.action-label'];
         }
-        return ['button', 'vscode-button', '[class*="button"]', '[class*="anysphere"]', 'a[role="button"]', '.action-label', '.codicon'];
+        return ['button', 'vscode-button', '[role="button"]', '.monaco-button', '.monaco-text-button', '[class*="button"]', '[class*="anysphere"]', 'a[role="button"]', '.action-label', '.codicon'];
     }
 
     function clickAcceptButtons() {
@@ -227,12 +255,22 @@
         if (window.__autoAcceptState?.userInteracting) return 0;
         const selectors = getButtonSelectors();
         let clicked = 0;
+        let seenButtons = 0;
+        let rejectDropdowns = 0;
+        let bypassEvents = false;
         for (const selector of selectors) {
             const els = queryAll(selector);
+            seenButtons += els.length;
             for (const el of els) {
+                // Ignore dropdown chevrons immediately
+                if (el.classList.contains('codicon-chevron-down') || (el.className && typeof el.className === 'string' && el.className.includes('dropdown'))) {
+                    rejectDropdowns++;
+                    continue;
+                }
+
                 if (isAcceptButton(el)) {
                     const btnText = (el.textContent || '').trim();
-                    log(`Clicking: "${btnText}"`);
+                    log(`[CLICKING] Dispatching to: "${btnText}"`);
 
                     // Prevent focus stealing and scroll jumping
                     const activeEl = document.activeElement;
@@ -241,40 +279,61 @@
                     const panel = el.closest('.auxiliary-bar-container') || el.closest('#workbench\\.parts\\.auxiliarybar') || el.closest('#antigravity\\.agentPanel');
                     const panelScroll = panel ? panel.scrollTop : 0;
 
+                    // OVERLAY PIERCING LOGIC
+                    const rect = el.getBoundingClientRect();
+                    const cx = rect.left + rect.width / 2;
+                    const cy = rect.top + rect.height / 2;
+                    const topEl = document.elementFromPoint(cx, cy);
+                    let hiddenOverlay = null;
+
+                    // If a transparent layer is covering our button, temporarily disable it
+                    if (topEl && topEl !== el && !el.contains(topEl)) {
+                         hiddenOverlay = topEl;
+                         hiddenOverlay.style.pointerEvents = 'none';
+                    }
+
                     const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
                     for (const eventName of events) {
                         try {
                             const eventType = eventName.startsWith('pointer') ? window.PointerEvent : window.MouseEvent;
-                            if (eventName.startsWith('pointer') && typeof window.PointerEvent === 'undefined') {
-                                continue;
-                            }
+                            if (eventName.startsWith('pointer') && typeof window.PointerEvent === 'undefined') continue;
 
                             const ev = new (eventType || MouseEvent)(eventName, {
                                 view: window,
                                 bubbles: true,
                                 cancelable: true,
                                 composed: true,
-                                clientX: 0,
-                                clientY: 0
+                                clientX: cx,
+                                clientY: cy
                             });
-
                             el.dispatchEvent(ev);
                         } catch (e) {
                             try {
-                                const ev = new MouseEvent(eventName, {
-                                    view: window,
-                                    bubbles: true,
-                                    cancelable: true,
-                                    composed: true,
-                                    clientX: 0,
-                                    clientY: 0
-                                });
+                                const ev = new MouseEvent(eventName, { view: window, bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy });
                                 el.dispatchEvent(ev);
                             } catch (fallbackErr) {
                                 log(`Error dispatching ${eventName}: ${fallbackErr.message}`);
                             }
                         }
                     }
+
+                    // RESTORE OVERLAY
+                    if (hiddenOverlay) {
+                        hiddenOverlay.style.pointerEvents = '';
+                    }
+
+                    // Wait 300ms to see if button vanished. If not, fallback to synthetic keyboard Enter.
+                    setTimeout(() => {
+                        if (document.body.contains(el)) {
+                            log(`[FALLBACK] Button survived pointer dispatch. Firing Keyboard Enter.`);
+                            try {
+                                el.focus();
+                                el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, composed: true }));
+                            } catch(e) {}
+                        } else {
+                            log(`[SUCCESS] Button removed from DOM after pointer dispatch.`);
+                        }
+                    }, 300);
 
                     // Restore focus and scroll position immediately
                     if (activeEl && typeof activeEl.focus === 'function') activeEl.focus({ preventScroll: true });
@@ -1133,7 +1192,43 @@
         return collectVisibleConversationText(cap);
     };
 
+    // --- VISUAL UI DEBUGGER (Floating Panel) ---
+    function initVisualDebugger() {
+        if (document.getElementById('acpp-debug-panel')) return;
+        const panel = document.createElement('div');
+        panel.id = 'acpp-debug-panel';
+        Object.assign(panel.style, {
+            position: 'fixed', bottom: '10px', left: '10px',
+            background: 'rgba(0,0,0,0.85)', color: '#00ffcc',
+            border: '2px solid #00ffcc', padding: '10px',
+            zIndex: '999999999', fontSize: '11px', fontFamily: 'monospace',
+            maxWidth: '400px', maxHeight: '200px', overflowY: 'auto',
+            pointerEvents: 'none'
+        });
+        document.body.appendChild(panel);
+    }
+    
+    function uiLog(msg) {
+        log(msg); // keep console
+        const panel = document.getElementById('acpp-debug-panel');
+        if (panel) {
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            panel.appendChild(line);
+            panel.scrollTop = panel.scrollHeight;
+            if (panel.childNodes.length > 20) panel.removeChild(panel.firstChild);
+        }
+    }
+
     window.__autoAcceptStart = function (config) {
+        // VISUAL PING: Prove that CDP injection works seamlessly.
+        try {
+            document.body.style.border = "8px solid #ff00ff";
+            document.body.style.boxSizing = "border-box";
+            initVisualDebugger();
+            uiLog("auto_accept.js starting in " + (window.location.href || 'unknown'));
+        } catch (e) {}
+
         const state = window.__autoAcceptState;
 
         // Stop if already running

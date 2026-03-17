@@ -1,5 +1,19 @@
 import * as vscode from 'vscode';
 
+/**
+ * Interface representing the statistics tracked by the extension.
+ */
+export interface Stats {
+    /** Number of files accepted by the agent */
+    files: number;
+    /** Number of terminal commands accepted by the agent */
+    commands: number;
+    /** Number of recovery attempts initiated by the watchdog */
+    recoveries: number;
+    /** Timestamp of the last statistics reset */
+    lastResetDate: number;
+}
+
 export class StateManager {
     private _isActive: boolean = false;
     private readonly _context: vscode.ExtensionContext;
@@ -37,7 +51,7 @@ export class StateManager {
      * @param category 'files' | 'commands' | 'recoveries'
      */
     public incrementStat(category: 'files' | 'commands' | 'recoveries'): void {
-        const stats: any = this._context.globalState.get('autoContinue.stats', {
+        const stats = this._context.globalState.get<Stats>('autoContinue.stats', {
             files: 0, commands: 0, recoveries: 0, lastResetDate: Date.now()
         });
 
@@ -56,9 +70,10 @@ export class StateManager {
 
     /**
      * Gets the current stats payload to display in the UI
+     * @returns The current statistics
      */
-    public getStats(): any {
-        return this._context.globalState.get('autoContinue.stats', {
+    public getStats(): Stats {
+        return this._context.globalState.get<Stats>('autoContinue.stats', {
             files: 0, commands: 0, recoveries: 0, lastResetDate: Date.now()
         });
     }

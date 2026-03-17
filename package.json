@@ -64,6 +64,7 @@
         }
     },
     "scripts": {
+        "start": "node server.js",
         "vscode:prepublish": "npm run build",
         "compile": "tsc -noEmit",
         "watch": "node esbuild.config.mjs --watch",

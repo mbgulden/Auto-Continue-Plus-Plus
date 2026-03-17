@@ -98,8 +98,10 @@
     // =================================================================
 
     const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation', 'allow this conversation'];
-    const rejectPatterns = ['skip', 'reject', 'cancel', 'close', 'refine'];
+    const rejectPatterns = ['skip', 'reject', 'cancel', 'close', 'refine', 'always run', 'ask every time'];
     const COMMAND_ELEMENTS = ['pre', 'code', 'pre code'];
+
+    // --- BANNED COMMAND DETECTION (from modules/03_clicking.js) ---
 
     // --- BANNED COMMAND DETECTION (from modules/03_clicking.js) ---
 
@@ -202,30 +204,44 @@
     // --- BUTTON DETECTION ---
 
     function isAcceptButton(el) {
-        let text = (el.textContent || '').trim().toLowerCase();
-        if (text.length === 0) {
-            text = (el.getAttribute('title') || el.getAttribute('aria-label') || '').trim().toLowerCase();
-        }
-        if (text.length === 0 || text.length > 50) return false;
+        const textContent = (el.textContent || '').trim().toLowerCase();
+        const ariaLabel = (el.getAttribute('title') || el.getAttribute('aria-label') || '').trim().toLowerCase();
+        const classNames = (el.className || '').toString().toLowerCase();
 
-        for (const rp of rejectPatterns) {
-            if (text.indexOf(rp) !== -1) {
-                return false;
+        // 1. If it's explicitly the Reject button (text is exactly 'reject' or 'skip'), drop it immediately
+        if (textContent === 'reject' || textContent === 'skip' || textContent === 'cancel' || textContent === 'close') return false;
+
+        // 2. Decide what text to evaluate. Prefer visible textContent if it exists, otherwise use ariaLabel
+        const evalText = textContent.length > 0 ? textContent : ariaLabel;
+        if (evalText.length === 0 || evalText.length > 50) return false;
+
+        // 3. Fallback reject pattern check (only if visible text isn't explicitly an accept pattern)
+        let isSpecificallyAccept = acceptPatterns.some(ap => textContent.includes(ap));
+        
+        if (!isSpecificallyAccept) {
+            for (const rp of rejectPatterns) {
+                if (evalText.includes(rp)) {
+                    // It's a reject button or dropdown
+                    return false;
+                }
             }
         }
+
+        // 4. Must match at least one accept pattern in either text or aria-label
         let matched = false;
         for (const ap of acceptPatterns) {
-            if (text.indexOf(ap) !== -1) { matched = true; break; }
+            if (evalText.includes(ap) || ariaLabel.includes(ap) || classNames.includes(ap.replace(' ', '-'))) { 
+                matched = true; 
+                break; 
+            }
         }
-        if (!matched) {
-            return false;
-        }
+        if (!matched) return false;
 
-        // Check banned commands for run/execute buttons
-        if (text.includes('run') || text.includes('execute')) {
+        // 5. Check banned commands for run/execute buttons
+        if (evalText.includes('run') || evalText.includes('execute') || ariaLabel.includes('run')) {
             const nearbyText = findNearbyCommandText(el);
             if (isCommandBanned(nearbyText)) {
-                log(`[REJECTED] Command Banned: "${text}" Nearby: "${nearbyText.substring(0,30)}..."`);
+                log(`[REJECTED] Command Banned. Nearby: "${nearbyText.substring(0,30)}..."`);
                 return false;
             }
         }
@@ -233,8 +249,12 @@
         const style = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
         
-        if (style.display === 'none' || rect.width === 0 || style.pointerEvents === 'none' || el.disabled) {
-            log(`[REJECTED] Hidden or Disabled. Text: "${text}" W:${rect.width} PE:${style.pointerEvents}`);
+        if (style.display === 'none' || rect.width === 0 || el.disabled) {
+            return false;
+        }
+        
+        // Some internal spans (like .action-label) have pointer-events: none, but we still want to dispatch to them
+        if (style.pointerEvents === 'none' && !classNames.includes('action-label') && !classNames.includes('codicon')) {
             return false;
         }
 
@@ -262,8 +282,26 @@
             const els = queryAll(selector);
             seenButtons += els.length;
             for (const el of els) {
-                // Ignore dropdown chevrons immediately
-                if (el.classList.contains('codicon-chevron-down') || (el.className && typeof el.className === 'string' && el.className.includes('dropdown'))) {
+                // Determine if this element is inside a forbidden container (history lists, dropdown menus, etc.)
+                let isInvalidArea = false;
+                let current = el;
+                for (let i = 0; i < 8; i++) {
+                    if (!current || current === document.body) break;
+                    if (current.classList && typeof current.className === 'string') {
+                        const cn = current.className.toLowerCase();
+                        if (cn.includes('monaco-list') || 
+                            cn.includes('context-view') || 
+                            cn.includes('dropdown') || 
+                            cn.includes('quick-input-widget')) {
+                            isInvalidArea = true;
+                            break;
+                        }
+                    }
+                    current = current.parentElement;
+                }
+
+                // Ignore dropdown chevrons immediately or if it's inside an invalid area
+                if (isInvalidArea || el.classList.contains('codicon-chevron-down')) {
                     rejectDropdowns++;
                     continue;
                 }

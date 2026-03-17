@@ -4,6 +4,7 @@ import { StatusBar } from './ui/StatusBar';
 import { PollingEngine } from './engine/PollingEngine';
 import { BanList } from './security/BanList';
 import { Watchdog } from './engine/Watchdog';
+import { CommandCache } from './engine/CommandCache';
 
 /**
  * Extension entry point.
@@ -15,6 +16,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Initialize Security and State
     const stateManager = new StateManager(context);
     const banList = new BanList();
+    const commandCache = new CommandCache();
 
     // Initialize UI Features
     const statusBar = new StatusBar(context, stateManager);
@@ -30,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
                 'cline.retry',
                 'continue.retry'
             ];
-            const allCommands = await vscode.commands.getCommands(true);
+            const allCommands = await commandCache.getCommands();
             for (const cmd of recoveryCommands) {
                 if (allCommands.includes(cmd)) {
                     await vscode.commands.executeCommand(cmd);
@@ -60,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
             ];
 
             let accepted = false;
-            const allCommands = await vscode.commands.getCommands(true);
+            const allCommands = await commandCache.getCommands();
 
             for (const cmd of knownCommands) {
                 if (allCommands.includes(cmd)) {
@@ -93,7 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
             ];
 
             let executed = false;
-            const allCommands = await vscode.commands.getCommands(true);
+            const allCommands = await commandCache.getCommands();
 
             for (const cmd of knownTerminalCommands) {
                 if (allCommands.includes(cmd)) {

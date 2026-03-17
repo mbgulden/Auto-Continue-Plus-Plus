@@ -197,33 +197,18 @@ export class HandoffProtocol {
             if (this._cdpHandler) {
                 const injectScript = `
                     (function() {
-                        const textarea = document.querySelector('textarea, div[contenteditable="true"]');
+                        const textarea = document.querySelector('textarea');
                         if (textarea) {
-                            if (textarea.tagName === 'TEXTAREA') {
-                                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-                                nativeInputValueSetter.call(textarea, ${JSON.stringify(newThreadPrompt)});
-                            } else {
-                                textarea.textContent = ${JSON.stringify(newThreadPrompt)};
-                            }
+                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                            nativeInputValueSetter.call(textarea, ${JSON.stringify(newThreadPrompt)});
                             textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
                             // Emulate Enter key
                             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-                            return true;
                         }
-                        return false;
                     })();
                 `;
-                try {
-                    const success = await this._cdpHandler.executeGlobalScript(injectScript);
-                    if (!success) {
-                        await vscode.env.clipboard.writeText(newThreadPrompt);
-                        await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
-                    }
-                } catch (e) {
-                    await vscode.env.clipboard.writeText(newThreadPrompt);
-                    await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
-                }
+                await this._cdpHandler.executeGlobalScript(injectScript);
             } else {
                 await vscode.env.clipboard.writeText(newThreadPrompt);
                 await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
@@ -304,37 +289,24 @@ export class HandoffProtocol {
             if (this._cdpHandler) {
                 const injectScript = `
                     (function() {
-                        const textarea = document.querySelector('textarea, div[contenteditable="true"]');
+                        const textarea = document.querySelector('textarea');
                         if (textarea) {
-                            if (textarea.tagName === 'TEXTAREA') {
-                                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
-                                nativeInputValueSetter.call(textarea, ${JSON.stringify(newThreadPrompt)});
-                            } else {
-                                textarea.textContent = ${JSON.stringify(newThreadPrompt)};
-                            }
+                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+                            nativeInputValueSetter.call(textarea, ${JSON.stringify(newThreadPrompt)});
                             textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
                             // Emulate Enter key
                             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-                            return true;
                         } else {
                             console.error('Auto-Continue CDP: Textarea not found for injection');
-                            return false;
                         }
                     })();
                 `;
                 try {
-                    const success = await this._cdpHandler.executeGlobalScript(injectScript);
-                    if (!success) {
-                        console.warn('[HandoffProtocol] CDP could not find textarea. Falling back to clipboard paste.');
-                        await vscode.env.clipboard.writeText(newThreadPrompt);
-                        await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
-                    }
+                    await this._cdpHandler.executeGlobalScript(injectScript);
                 } catch (e: any) {
                     console.error('[HandoffProtocol] CDP script execution failed:', e);
                     vscode.window.showErrorMessage(`CDP Injection Failed: ${e.message}`);
-                    await vscode.env.clipboard.writeText(newThreadPrompt);
-                    await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
                 }
             } else {
                 try {

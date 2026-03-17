@@ -62,30 +62,15 @@
         return panels.length > 0 ? panels : [doc];
     };
 
-    function findElementsPiercingShadow(root, selector, result = []) {
-        try {
-            const nodes = Array.from(root.querySelectorAll(selector));
-            result.push(...nodes);
-        } catch(e) {}
-
-        try {
-            const allElements = root.querySelectorAll('*');
-            for (const el of allElements) {
-                if (el.shadowRoot) {
-                    findElementsPiercingShadow(el.shadowRoot, selector, result);
-                }
-            }
-        } catch(e) {}
-        return result;
-    }
-
     const queryAll = (selector) => {
         const results = [];
         getDocuments().forEach(doc => {
             try {
+                // To avoid clicking on buttons outside the agent panel,
+                // we restrict the search to the agent panel DOM trees.
                 const panels = getAgentPanels(doc);
                 for (const panel of panels) {
-                    findElementsPiercingShadow(panel, selector, results);
+                    results.push(...Array.from(panel.querySelectorAll(selector)));
                 }
             } catch (e) { }
         });
@@ -98,10 +83,8 @@
     // =================================================================
 
     const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation', 'allow this conversation'];
-    const rejectPatterns = ['skip', 'reject', 'cancel', 'close', 'refine', 'always run', 'ask every time'];
+    const rejectPatterns = ['skip', 'reject', 'cancel', 'close', 'refine'];
     const COMMAND_ELEMENTS = ['pre', 'code', 'pre code'];
-
-    // --- BANNED COMMAND DETECTION (from modules/03_clicking.js) ---
 
     // --- BANNED COMMAND DETECTION (from modules/03_clicking.js) ---
 
@@ -204,91 +187,39 @@
     // --- BUTTON DETECTION ---
 
     function isAcceptButton(el) {
-        const textContent = (el.textContent || '').trim().toLowerCase();
-        const ariaLabel = (el.getAttribute('title') || el.getAttribute('aria-label') || '').trim().toLowerCase();
-        const classNames = (el.className || '').toString().toLowerCase();
-
-        // 1. If it's explicitly the Reject button (text is exactly 'reject' or 'skip'), drop it immediately
-        if (textContent === 'reject' || textContent === 'skip' || textContent === 'cancel' || textContent === 'close') return false;
-
-        // 2. Decide what text to evaluate. Prefer visible textContent if it exists, otherwise use ariaLabel
-        const evalText = textContent.length > 0 ? textContent : ariaLabel;
-        if (evalText.length === 0 || evalText.length > 50) return false;
-
-        // 2.5 Absolute VS Code Whitelist (Overrides reject patterns to prevent "always run" from conflicting with "run")
-        if (evalText.includes('run alt+') || evalText.includes('run ⌘')) {
-            const nearbyText = findNearbyCommandText(el);
-            if (isCommandBanned(nearbyText)) return false;
-            return true;
+        let text = (el.textContent || '').trim().toLowerCase();
+        if (text.length === 0) {
+            text = (el.getAttribute('title') || el.getAttribute('aria-label') || '').trim().toLowerCase();
         }
+        if (text.length === 0 || text.length > 50) return false;
 
-        // 3. Absolute Reject Pattern Check (takes precedence over ANY partial accept match)
         for (const rp of rejectPatterns) {
-            if (evalText.includes(rp)) {
-                return false;
-            }
+            if (text.indexOf(rp) !== -1) return false;
         }
-
-        // 4. Must match at least one accept pattern in either text or aria-label
         let matched = false;
-        // Strict exact matches for heavily overloaded words
-        if (evalText === 'run' || evalText === 'accept') {
-            matched = true;
-        } else {
-            // Whitelist for specific VS Code / Continue terminal execution expansions
-            if (evalText.includes('expand')) {
-                // The "Expand <" button is adjacent to "1 Step Requires Input" or "Run command", check parent containers up to 5 levels deep
-                let p = el.parentElement;
-                let found = false;
-                for (let i=0; i<5 && p; i++) {
-                    const txt = (p.textContent || '').toLowerCase();
-                    if (txt.includes('requires input') || txt.includes('run command') || txt.includes('step requires')) {
-                        found = true;
-                        break;
-                    }
-                    p = p.parentElement;
-                }
-                if (found) matched = true;
-            } else {
-                for (const ap of acceptPatterns) {
-                    if (evalText.includes(ap) || ariaLabel.includes(ap) || classNames.includes(ap.replace(' ', '-'))) { 
-                        matched = true; 
-                        break; 
-                    }
-                }
-            }
+        for (const ap of acceptPatterns) {
+            if (text.indexOf(ap) !== -1) { matched = true; break; }
         }
         if (!matched) return false;
 
-        // 5. Check banned commands for run/execute buttons
-        if (evalText.includes('run') || evalText.includes('execute') || ariaLabel.includes('run')) {
+        // Check banned commands for run/execute buttons
+        if (text.includes('run') || text.includes('execute')) {
             const nearbyText = findNearbyCommandText(el);
-            if (isCommandBanned(nearbyText)) {
-                log(`[REJECTED] Command Banned. Nearby: "${nearbyText.substring(0,30)}..."`);
-                return false;
-            }
+            if (isCommandBanned(nearbyText)) return false;
         }
 
         const style = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
-        
-        if (style.display === 'none' || rect.width === 0 || el.disabled) {
-            return false;
-        }
-        
-        // Removed pointerEvents === 'none' check. If it passed the text checks, it's the button we want!
-        // We trigger el.click() natively anyway which pierces CSS.
-
-        return true;
+        return style.display !== 'none' && rect.width > 0 && style.pointerEvents !== 'none' && !el.disabled;
     }
 
     function getButtonSelectors() {
         const state = window.__autoAcceptState;
         const ide = state ? state.ide : 'cursor';
         if (ide === 'antigravity') {
-            return ['button', 'vscode-button', '[role="button"]', '.monaco-button', '.monaco-text-button', '.bg-ide-button-background', 'button.bg-primary', 'button.rounded-l', '[class*="button"]', '.codicon', '.action-label'];
+            return ['button', 'vscode-button', '.bg-ide-button-background', 'button.bg-primary', 'button.rounded-l', '[class*="button"]', '.codicon', '.action-label'];
         }
-        return ['button', 'vscode-button', '[role="button"]', '.monaco-button', '.monaco-text-button', '[class*="button"]', '[class*="anysphere"]', 'a[role="button"]', '.action-label', '.codicon'];
+        return ['button', 'vscode-button', '[class*="button"]', '[class*="anysphere"]', 'a[role="button"]', '.action-label', '.codicon'];
     }
 
     function clickAcceptButtons() {
@@ -296,47 +227,12 @@
         if (window.__autoAcceptState?.userInteracting) return 0;
         const selectors = getButtonSelectors();
         let clicked = 0;
-        let seenButtons = 0;
-        let rejectDropdowns = 0;
-        let bypassEvents = false;
         for (const selector of selectors) {
             const els = queryAll(selector);
-            seenButtons += els.length;
             for (const el of els) {
-                // Determine if this element is inside a forbidden container (history lists, dropdown menus, etc.)
-                let isInvalidArea = false;
-                let current = el;
-                for (let i = 0; i < 8; i++) {
-                    if (!current || current === document.body) break;
-                    if (current.classList && typeof current.className === 'string') {
-                        const cn = current.className.toLowerCase();
-                        if (cn.includes('context-view') || 
-                            cn.includes('dropdown') || 
-                            cn.includes('quick-input-widget') ||
-                            cn.includes('explorer-viewlet')) {
-                            isInvalidArea = true;
-                            break;
-                        }
-                    }
-                    if (current.id && typeof current.id === 'string') {
-                        const id = current.id.toLowerCase();
-                        if (id.includes('workbench.view.explorer') || id.includes('workbench.view.scm')) {
-                            isInvalidArea = true;
-                            break;
-                        }
-                    }
-                    current = current.parentElement;
-                }
-
-                // Ignore dropdown chevrons immediately or if it's inside an invalid area
-                if (isInvalidArea || el.classList.contains('codicon-chevron-down')) {
-                    rejectDropdowns++;
-                    continue;
-                }
-
                 if (isAcceptButton(el)) {
                     const btnText = (el.textContent || '').trim();
-                    log(`[CLICKING] Dispatching to: "${btnText}"`);
+                    log(`Clicking: "${btnText}"`);
 
                     // Prevent focus stealing and scroll jumping
                     const activeEl = document.activeElement;
@@ -345,61 +241,40 @@
                     const panel = el.closest('.auxiliary-bar-container') || el.closest('#workbench\\.parts\\.auxiliarybar') || el.closest('#antigravity\\.agentPanel');
                     const panelScroll = panel ? panel.scrollTop : 0;
 
-                    // OVERLAY PIERCING LOGIC
-                    const rect = el.getBoundingClientRect();
-                    const cx = rect.left + rect.width / 2;
-                    const cy = rect.top + rect.height / 2;
-                    const topEl = document.elementFromPoint(cx, cy);
-                    let hiddenOverlay = null;
-
-                    // If a transparent layer is covering our button, temporarily disable it
-                    if (topEl && topEl !== el && !el.contains(topEl)) {
-                         hiddenOverlay = topEl;
-                         hiddenOverlay.style.pointerEvents = 'none';
-                    }
-
                     const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
                     for (const eventName of events) {
                         try {
                             const eventType = eventName.startsWith('pointer') ? window.PointerEvent : window.MouseEvent;
-                            if (eventName.startsWith('pointer') && typeof window.PointerEvent === 'undefined') continue;
+                            if (eventName.startsWith('pointer') && typeof window.PointerEvent === 'undefined') {
+                                continue;
+                            }
 
                             const ev = new (eventType || MouseEvent)(eventName, {
                                 view: window,
                                 bubbles: true,
                                 cancelable: true,
                                 composed: true,
-                                clientX: cx,
-                                clientY: cy
+                                clientX: 0,
+                                clientY: 0
                             });
+
                             el.dispatchEvent(ev);
                         } catch (e) {
                             try {
-                                const ev = new MouseEvent(eventName, { view: window, bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy });
+                                const ev = new MouseEvent(eventName, {
+                                    view: window,
+                                    bubbles: true,
+                                    cancelable: true,
+                                    composed: true,
+                                    clientX: 0,
+                                    clientY: 0
+                                });
                                 el.dispatchEvent(ev);
                             } catch (fallbackErr) {
                                 log(`Error dispatching ${eventName}: ${fallbackErr.message}`);
                             }
                         }
                     }
-
-                    // RESTORE OVERLAY
-                    if (hiddenOverlay) {
-                        hiddenOverlay.style.pointerEvents = '';
-                    }
-
-                    // Wait 300ms to see if button vanished. If not, fallback to synthetic keyboard Enter.
-                    setTimeout(() => {
-                        if (document.body.contains(el)) {
-                            log(`[FALLBACK] Button survived pointer dispatch. Firing Keyboard Enter.`);
-                            try {
-                                el.focus();
-                                el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, composed: true }));
-                            } catch(e) {}
-                        } else {
-                            log(`[SUCCESS] Button removed from DOM after pointer dispatch.`);
-                        }
-                    }, 300);
 
                     // Restore focus and scroll position immediately
                     if (activeEl && typeof activeEl.focus === 'function') activeEl.focus({ preventScroll: true });
@@ -1258,26 +1133,7 @@
         return collectVisibleConversationText(cap);
     };
 
-    // --- VISUAL UI DEBUGGER (Floating Panel) ---
-    // (Removed per user request)
-    
-    function uiLog(msg) {
-        log(msg); // keep console
-    }
-
     window.__autoAcceptStart = function (config) {
-        // 🚨 PREVENT INJECTION INTO NON-IDE WEBVIEWS 🚨
-        // If this script is accidentally injected into a purely UI webview (like Agent Manager dashboard), abort immediately.
-        const dTitle = document.title.toLowerCase();
-        if (dTitle === 'agent manager' || dTitle === 'swarm manager' || dTitle.includes('auto-continue dashboard') || dTitle.includes('agent manager pro')) {
-            console.log('[Auto-Continue] Aborting injection: Detected UI Webview instead of IDE window.');
-            return;
-        }
-
-        try {
-            // Removed visual ping border
-        } catch (e) {}
-
         const state = window.__autoAcceptState;
 
         // Stop if already running

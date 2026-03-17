@@ -24,15 +24,14 @@ export interface AutoContinueStats {
 export class StateManager {
     private _isActive: boolean = false;
     private readonly _context: vscode.ExtensionContext;
+    private readonly STATE_KEY = 'autoContinue.isActive';
 
     private _onDidChangeStats = new vscode.EventEmitter<AutoContinueStats>();
     public readonly onDidChangeStats = this._onDidChangeStats.event;
 
     constructor(context: vscode.ExtensionContext) {
         this._context = context;
-        // Default to OFF unless configured to enable at startup
-        const config = vscode.workspace.getConfiguration('autoContinue');
-        this._isActive = config.get<boolean>('enableAtStartup', false);
+        this._isActive = this._context.globalState.get<boolean>(this.STATE_KEY, false);
     }
 
     /**
@@ -40,19 +39,13 @@ export class StateManager {
      */
     public toggleActive(): void {
         this._isActive = !this._isActive;
+        this._context.globalState.update(this.STATE_KEY, this._isActive);
 
         if (this._isActive) {
             vscode.window.showInformationMessage('Auto-Continue: ENABLED');
         } else {
             vscode.window.showInformationMessage('Auto-Continue: PAUSED');
         }
-    }
-
-    /**
-     * Instantly forces the isActive state to a specific boolean without a toast.
-     */
-    public forceState(active: boolean): void {
-        this._isActive = active;
     }
 
     /**

@@ -44,14 +44,14 @@ export class FileReaderWriterBoltOn implements IBoltOn {
             const absolutePath = path.resolve(this._workspaceRoot, filePath);
             const relativePath = path.relative(this._workspaceRoot, absolutePath).replace(/\\/g, '/');
 
-            // Allow Path Traversal if explicitly intended by the megaprompt/decomposition
+            // Prevent Path Traversal
             if (relativePath.startsWith('..')) {
-                console.warn(`[FileReaderWriter] Agent traversing outside workspace: ${absolutePath}`);
+                throw new Error(`[FileReaderWriter] Security Violation: Path traversal detected. Agent is attempting to access outside the workspace root: '${filePath}'.`);
             }
 
-            // 1. Directory Boundary Enforcement (check both relative and absolute paths)
-            let isAllowed = contract.allowedDirectories.some(dir => relativePath.startsWith(dir) || absolutePath.replace(/\\/g, '/').startsWith(dir.replace(/\\/g, '/')));
-            let isReadOnly = contract.readOnlyDirectories.some(dir => relativePath.startsWith(dir) || absolutePath.replace(/\\/g, '/').startsWith(dir.replace(/\\/g, '/')));
+            // 1. Directory Boundary Enforcement
+            let isAllowed = contract.allowedDirectories.some(dir => relativePath.startsWith(dir));
+            let isReadOnly = contract.readOnlyDirectories.some(dir => relativePath.startsWith(dir));
 
             if (intent === 'write_file') {
                 if (!isAllowed || isReadOnly) {

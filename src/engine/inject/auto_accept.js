@@ -97,7 +97,7 @@
     // (ported from compositor + modules/03_clicking.js)
     // =================================================================
 
-    const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation', 'allow this conversation', 'expand'];
+    const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation', 'allow this conversation'];
     const rejectPatterns = ['skip', 'reject', 'cancel', 'close', 'refine', 'always run', 'ask every time'];
     const COMMAND_ELEMENTS = ['pre', 'code', 'pre code'];
 
@@ -230,10 +230,15 @@
         if (evalText === 'run' || evalText === 'accept') {
             matched = true;
         } else {
-            for (const ap of acceptPatterns) {
-                if (evalText.includes(ap) || ariaLabel.includes(ap) || classNames.includes(ap.replace(' ', '-'))) { 
-                    matched = true; 
-                    break; 
+            // Whitelist for specific VS Code / Continue terminal execution expansions
+            if (evalText.includes('step requires input') && evalText.includes('expand')) {
+                matched = true;
+            } else {
+                for (const ap of acceptPatterns) {
+                    if (evalText.includes(ap) || ariaLabel.includes(ap) || classNames.includes(ap.replace(' ', '-'))) { 
+                        matched = true; 
+                        break; 
+                    }
                 }
             }
         }
@@ -293,7 +298,15 @@
                         const cn = current.className.toLowerCase();
                         if (cn.includes('context-view') || 
                             cn.includes('dropdown') || 
-                            cn.includes('quick-input-widget')) {
+                            cn.includes('quick-input-widget') ||
+                            cn.includes('explorer-viewlet')) {
+                            isInvalidArea = true;
+                            break;
+                        }
+                    }
+                    if (current.id && typeof current.id === 'string') {
+                        const id = current.id.toLowerCase();
+                        if (id.includes('workbench.view.explorer') || id.includes('workbench.view.scm')) {
                             isInvalidArea = true;
                             break;
                         }
@@ -1239,6 +1252,14 @@
     }
 
     window.__autoAcceptStart = function (config) {
+        // 🚨 PREVENT INJECTION INTO NON-IDE WEBVIEWS 🚨
+        // If this script is accidentally injected into a purely UI webview (like Agent Manager dashboard), abort immediately.
+        const dTitle = document.title.toLowerCase();
+        if (dTitle === 'agent manager' || dTitle === 'swarm manager' || dTitle.includes('auto-continue dashboard') || dTitle.includes('agent manager pro')) {
+            console.log('[Auto-Continue] Aborting injection: Detected UI Webview instead of IDE window.');
+            return;
+        }
+
         try {
             // Removed visual ping border
         } catch (e) {}

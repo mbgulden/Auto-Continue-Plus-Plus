@@ -24,8 +24,8 @@ export class StatusBar implements vscode.Disposable {
         // Create Dashboard quick-access item
         this._dashboardItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
         this._dashboardItem.command = 'auto-continue.dashboard';
-        this._dashboardItem.text = `$(graph) Lineage`;
-        this._dashboardItem.tooltip = 'Open Auto-Continue Context Lineage Dashboard';
+        this._dashboardItem.text = `$(graph) Agents Pro`;
+        this._dashboardItem.tooltip = 'Open Auto-Continue Agent Manager PRO Dashboard';
 
         // Create Settings quick-access item
         this._settingsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 98);

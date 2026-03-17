@@ -349,6 +349,9 @@ The JSON schema MUST be an array of objects matching this exact structure:
         let maxIterations = 15;
         let iteration = 0;
 
+        let consecutiveFailures = 0;
+        let lastErrorMsg = '';
+
         while (iteration < maxIterations) {
             iteration++;
 
@@ -444,7 +447,6 @@ The JSON schema MUST be an array of objects matching this exact structure:
 
                         const result = await boltOn.execute(state);
 
-                        // Push function response to history
                         history.push({
                             role: "function",
                             parts: [{
@@ -454,9 +456,29 @@ The JSON schema MUST be an array of objects matching this exact structure:
                                 }
                             }]
                         });
+                        
+                        // Reset failure counter on success
+                        consecutiveFailures = 0;
+                        lastErrorMsg = '';
+
                     } catch (e: any) {
                         console.error(`[Headless API] Tool execution failed: ${e.message}`);
                         vscode.window.showErrorMessage(`[Headless API] Tool execution failed for ${contract.role}: ${e.message}`);
+                        
+                        // Anti-Spiral Protocol
+                        if (e.message === lastErrorMsg) {
+                            consecutiveFailures++;
+                        } else {
+                            consecutiveFailures = 1;
+                            lastErrorMsg = e.message;
+                        }
+
+                        if (consecutiveFailures >= 2) {
+                            vscode.window.showErrorMessage(`[Headless API] Anti-Spiral Protocol triggered for ${contract.role}. Agent failed with the same error twice in a row. Terminating execution.`);
+                            taskComplete = true;
+                            break; // Break out of the parts loop
+                        }
+
                         history.push({
                             role: "function",
                             parts: [{

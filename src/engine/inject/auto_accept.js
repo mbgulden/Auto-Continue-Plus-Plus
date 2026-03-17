@@ -232,12 +232,18 @@
         } else {
             // Whitelist for specific VS Code / Continue terminal execution expansions
             if (evalText.includes('expand')) {
-                // The "Expand <" button is adjacent to "1 Step Requires Input", check parent containers up to 2 levels deep
-                const pText = (el.parentElement?.textContent || '').toLowerCase();
-                const gpText = (el.parentElement?.parentElement?.textContent || '').toLowerCase();
-                if (pText.includes('requires input') || gpText.includes('requires input')) {
-                    matched = true;
+                // The "Expand <" button is adjacent to "1 Step Requires Input" or "Run command", check parent containers up to 5 levels deep
+                let p = el.parentElement;
+                let found = false;
+                for (let i=0; i<5 && p; i++) {
+                    const txt = (p.textContent || '').toLowerCase();
+                    if (txt.includes('requires input') || txt.includes('run command') || txt.includes('step requires')) {
+                        found = true;
+                        break;
+                    }
+                    p = p.parentElement;
                 }
+                if (found) matched = true;
             } else {
                 for (const ap of acceptPatterns) {
                     if (evalText.includes(ap) || ariaLabel.includes(ap) || classNames.includes(ap.replace(' ', '-'))) { 

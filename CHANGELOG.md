@@ -4,6 +4,12 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [1.1.20] - 2026-03-16
+
+### Fixed
+- **Macro Overhaul:** The `CDPHandler` and `PollingEngine` now successfully execute `scanAndInject` continuously instead of only resolving true once. Webviews opened after the auto-run toggle is pressed are now instantly picked up and injected.
+- **Metric Spam Abatement:** The fallback IDE command execution loop in `extension.ts` now suppresses false-positive metric incrementing when no diff buttons exist. Dashboard tracking metrics are now highly deterministic to actual auto-accept button clicks via CDP. 
+
 ## [1.1.19] - 2026-03-15
 
 ### Fixed

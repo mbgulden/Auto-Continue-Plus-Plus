@@ -97,7 +97,7 @@
     // (ported from compositor + modules/03_clicking.js)
     // =================================================================
 
-    const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation', 'allow this conversation'];
+    const acceptPatterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'always allow', 'allow once', 'allow', 'approve', 'save', 'accept all', 'allow for this conversation', 'allow this conversation', 'expand'];
     const rejectPatterns = ['skip', 'reject', 'cancel', 'close', 'refine', 'always run', 'ask every time'];
     const COMMAND_ELEMENTS = ['pre', 'code', 'pre code'];
 
@@ -291,8 +291,7 @@
                     if (!current || current === document.body) break;
                     if (current.classList && typeof current.className === 'string') {
                         const cn = current.className.toLowerCase();
-                        if (cn.includes('monaco-list') || 
-                            cn.includes('context-view') || 
+                        if (cn.includes('context-view') || 
                             cn.includes('dropdown') || 
                             cn.includes('quick-input-widget')) {
                             isInvalidArea = true;

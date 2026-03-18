@@ -7,23 +7,27 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
 import { BoltOnRegistry } from '../boltons/BoltOnRegistry';
+import { BudgetManager } from './BudgetManager';
 
 export class SwarmOrchestrator {
     private _handoffProtocol: HandoffProtocol;
     private _contractManager: ContractManager;
     private _lockManager: SwarmLockManager;
     private _boltOnRegistry: BoltOnRegistry;
+    private _budgetManager: BudgetManager;
 
     constructor(
         handoffProtocol: HandoffProtocol,
         contractManager: ContractManager,
         lockManager: SwarmLockManager,
-        boltOnRegistry: BoltOnRegistry
+        boltOnRegistry: BoltOnRegistry,
+        budgetManager: BudgetManager
     ) {
         this._handoffProtocol = handoffProtocol;
         this._contractManager = contractManager;
         this._lockManager = lockManager;
         this._boltOnRegistry = boltOnRegistry;
+        this._budgetManager = budgetManager;
     }
 
     /**
@@ -47,7 +51,9 @@ export class SwarmOrchestrator {
                 taskDescription: t.description,
                 allowedDirectories: t.allowedDirectories || ['src/'],
                 readOnlyDirectories: t.readOnlyDirectories || [],
-                targetHead: t.targetHead || 'Headless API'
+                targetHead: t.targetHead || 'Headless API',
+                budgetLimit: undefined,
+                localContextMax: 8192
             };
         });
     }
@@ -67,6 +73,14 @@ export class SwarmOrchestrator {
 
         // 1. Process Headless & Local AI concurrently in the background (fire and forget)
         for (const contract of [...headlessSwarm, ...localSwarm]) {
+            this._budgetManager.initializeThread(
+                contract.threadId, 
+                contract.role, 
+                contract.targetHead, 
+                contract.budgetLimit || null, 
+                contract.localContextMax || 8192
+            );
+
             this._contractManager.createContract(contract);
 
             if (contract.targetHead === 'Headless API') {
@@ -99,6 +113,14 @@ export class SwarmOrchestrator {
 
         const task = queue.shift()!;
         console.log(`[SwarmOrchestrator] Spawning UI task: ${task.threadId}`);
+
+        this._budgetManager.initializeThread(
+            task.threadId, 
+            task.role, 
+            task.targetHead, 
+            task.budgetLimit || null, 
+            task.localContextMax || 8192
+        );
 
         // Ensure contract is written before spawn
         this._contractManager.createContract(task);
@@ -137,6 +159,7 @@ export class SwarmOrchestrator {
         });
 
         console.log(`[SwarmOrchestrator] UI task ${task.threadId} completed.`);
+        this._budgetManager.resolveThread(task.threadId);
 
         // Pop the next task in the queue
         if (queue.length > 0) {
@@ -355,6 +378,11 @@ The JSON schema MUST be an array of objects matching this exact structure:
         while (iteration < maxIterations) {
             iteration++;
 
+            if (this._budgetManager.checkCloudOverage(contract.threadId)) {
+                vscode.window.showErrorMessage(`[Headless API] Swarm Worker ${contract.role} exceeded cloud API budget limit of ${contract.budgetLimit} tokens! Halting.`);
+                break;
+            }
+
             const payload = JSON.stringify({
                 system_instruction: { parts: [{ text: systemInstruction }] },
                 contents: history.length > 0 ? history : [{ role: "user", parts: [{ text: "Begin execution." }] }],
@@ -396,6 +424,16 @@ The JSON schema MUST be an array of objects matching this exact structure:
                     if (data.candidates && data.candidates.length > 0) {
                         modelResponse = data.candidates[0].content;
                         success = true;
+
+                        // Telemetry Recording
+                        if (data.usageMetadata && data.usageMetadata.promptTokenCount !== undefined) {
+                            this._budgetManager.recordCloudUsage(
+                                contract.threadId, 
+                                data.usageMetadata.promptTokenCount, 
+                                data.usageMetadata.candidatesTokenCount || 0
+                            );
+                        }
+
                         break;
                     }
                 } catch (e: any) {
@@ -502,6 +540,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
 
         // Clean up contract
         this._contractManager.resolveContract(contract.threadId);
+        this._budgetManager.resolveThread(contract.threadId);
         vscode.window.showInformationMessage(`Swarm Agent [${contract.role}] completed its headless task.`);
     }
 
@@ -511,12 +550,54 @@ The JSON schema MUST be an array of objects matching this exact structure:
     private async _executeLocalAI(contract: AgentContract): Promise<void> {
         console.log(`[Local AI] Starting Swarm Worker: ${contract.role} (${contract.threadId})`);
 
-        // MVP Placeholder: Just simulate work and mark complete
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        let history: any[] = [{ role: "user", parts: [{ text: "Begin execution." }] }];
+        let maxIterations = 8;
+        let iteration = 0;
+
+        // MVP Placeholder: Simulate work loop with auto-summary
+        while (iteration < maxIterations) {
+            iteration++;
+
+            // Mock Tracking - Every iter adds 1500 tokens of "context"
+            const simulatedTokens = 1500;
+            this._budgetManager.recordLocalContextAddition(contract.threadId, simulatedTokens);
+
+            if (this._budgetManager.isLocalContextCritical(contract.threadId)) {
+                console.log(`[Local AI] Context Window critical for ${contract.role}. Triggering Auto-Summary.`);
+                vscode.window.showInformationMessage(`[Local AI] Context Window critical for ${contract.role}. Auto-Summarizing to prevent hallucinations...`);
+                
+                await this._autoSummarizeAndReset(history, contract);
+                continue;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            // Let's pretend it finishes on iter 3
+            if (iteration >= 3) {
+                break;
+            }
+        }
+
         console.log(`[Local AI] Completed Swarm Worker: ${contract.role} (${contract.threadId})`);
 
         // Clean up contract
         this._contractManager.resolveContract(contract.threadId);
+        this._budgetManager.resolveThread(contract.threadId);
         vscode.window.showInformationMessage(`Swarm Agent [${contract.role}] completed its local task.`);
+    }
+
+    /**
+     * Resets the local agent's history via an auto-summary to alleviate context window pressure.
+     */
+    private async _autoSummarizeAndReset(history: any[], contract: AgentContract): Promise<void> {
+        // Here we would typically hit a lightweight local LLM or fast Gemini model to summarize the history
+        // e.g. "Summarize your exact progress and findings so far..."
+        console.log(`[Local AI] Performing Auto-Summary for thread ${contract.threadId}`);
+
+        // Stubbed auto-summary logic
+        history.length = 0;
+        history.push({ role: "user", parts: [{ text: "Resuming task with summarized context: You have checked the schema and partially implemented the endpoint. Continue." }] });
+        
+        // Reset the budget manager's context fill level to just the summary size (~500 tokens)
+        this._budgetManager.resetLocalContext(contract.threadId, 500);
     }
 }

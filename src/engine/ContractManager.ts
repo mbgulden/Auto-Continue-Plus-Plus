@@ -9,7 +9,8 @@ export interface AgentContract {
     allowedDirectories: string[];
     readOnlyDirectories: string[];
     targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI';
-    maxTokens?: number;
+    budgetLimit?: number;
+    localContextMax?: number;
 }
 
 /**

@@ -17,6 +17,7 @@ import * as cp from 'child_process';
 import { BoltOnRegistry } from './boltons/BoltOnRegistry';
 import { ZeroTrustValidator } from './security/ZeroTrustValidator';
 import { FileReaderWriterBoltOn } from './boltons/impl/FileReaderWriterBoltOn';
+import { BudgetManager } from './engine/BudgetManager';
 
 /**
  * Validates the Global Terms of Service.
@@ -61,6 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
     const contextTracker = new ContextTracker(stateManager);
     const syncEngine = new SyncEngine(context);
     const cdpHandler = new CDPHandler();
+    const budgetManager = BudgetManager.getInstance(stateManager);
 
     // Initialize UI Features
     const statusBar = new StatusBar(context, stateManager);
@@ -78,7 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
     const fileReaderWriter = new FileReaderWriterBoltOn(contractManager, lockManager);
     boltOnRegistry.register(fileReaderWriter);
 
-    const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager, boltOnRegistry);
+    const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager, boltOnRegistry, budgetManager);
 
     // Provide initial UI state for CDP
     cdpHandler.isCDPAvailable().then(isActive => statusBar.setCdpStatus(isActive));
@@ -229,7 +231,7 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage('You must agree to the Terms of Service to use the Swarm.');
             return;
         }
-        SwarmWebview.createOrShow(swarmOrchestrator, stateManager, boltOnRegistry);
+        SwarmWebview.createOrShow(swarmOrchestrator, stateManager, boltOnRegistry, budgetManager);
     });
 
     const enableCDPCommand = vscode.commands.registerCommand('auto-continue.enableCDP', async () => {

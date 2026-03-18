@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { SwarmOrchestrator } from '../engine/SwarmOrchestrator';
 import { StateManager } from '../state/StateManager';
 import { BoltOnRegistry } from '../boltons/BoltOnRegistry';
+import { BudgetManager } from '../engine/BudgetManager';
 
 export class SwarmWebview {
     public static currentPanel: SwarmWebview | undefined;
@@ -22,17 +23,19 @@ export class SwarmWebview {
     private _orchestrator: SwarmOrchestrator;
     private _stateManager: StateManager;
     private _boltOnRegistry: BoltOnRegistry;
+    private _budgetManager: BudgetManager;
 
     // UI State
     private _draftContracts: any[] = [];
     private _isDecomposing: boolean = false;
     private _lastPrompt: string = '';
 
-    private constructor(panel: vscode.WebviewPanel, orchestrator: SwarmOrchestrator, stateManager: StateManager, boltOnRegistry: BoltOnRegistry) {
+    private constructor(panel: vscode.WebviewPanel, orchestrator: SwarmOrchestrator, stateManager: StateManager, boltOnRegistry: BoltOnRegistry, budgetManager: BudgetManager) {
         this._panel = panel;
         this._orchestrator = orchestrator;
         this._stateManager = stateManager;
         this._boltOnRegistry = boltOnRegistry;
+        this._budgetManager = budgetManager;
 
         this._update();
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -42,6 +45,9 @@ export class SwarmWebview {
             if (this._panel.visible && !this._isDecomposing) this._update();
         }, 3000);
         this._disposables.push({ dispose: () => clearInterval(interval) });
+
+        // Listen for live telemetry broadcasts from StateManager
+        this._stateManager.onDidChangeTelemetry(() => this._update(), null, this._disposables);
 
         this._panel.webview.onDidReceiveMessage(
             async message => {
@@ -62,7 +68,7 @@ export class SwarmWebview {
         );
     }
 
-    public static createOrShow(orchestrator: SwarmOrchestrator, stateManager: StateManager, boltOnRegistry: BoltOnRegistry) {
+    public static createOrShow(orchestrator: SwarmOrchestrator, stateManager: StateManager, boltOnRegistry: BoltOnRegistry, budgetManager: BudgetManager) {
         const column = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined;
 
         if (SwarmWebview.currentPanel) {
@@ -77,7 +83,7 @@ export class SwarmWebview {
             { enableScripts: true }
         );
 
-        SwarmWebview.currentPanel = new SwarmWebview(panel, orchestrator, stateManager, boltOnRegistry);
+        SwarmWebview.currentPanel = new SwarmWebview(panel, orchestrator, stateManager, boltOnRegistry, budgetManager);
     }
 
     private async _handleDecompose(prompt: string) {
@@ -112,7 +118,9 @@ export class SwarmWebview {
             taskDescription: c.taskDescription,
             allowedDirectories: c.allowedDirectories.split(',').map((s: string) => s.trim()).filter((s: string) => s),
             readOnlyDirectories: c.readOnlyDirectories.split(',').map((s: string) => s.trim()).filter((s: string) => s),
-            targetHead: c.targetHead
+            targetHead: c.targetHead,
+            budgetLimit: c.budgetLimit,
+            localContextMax: c.localContextMax
         }));
 
         this._draftContracts = []; // clear
@@ -153,6 +161,40 @@ export class SwarmWebview {
             boltOnHtml = `<div class="empty-state">No Bolt-Ons registered yet. Waiting for extension to register skills...</div>`;
         }
 
+        // --- Active Swarm Telemetry UI ---
+        const telemetry = this._budgetManager.getAllTelemetry();
+        let telemetryHtml = '';
+        if (telemetry.length > 0) {
+            telemetryHtml = `<div class="card-grid">`;
+            telemetry.forEach(t => {
+                const cloudTokens = t.targetHead === 'Headless API' ? `${t.cloudTokensUsed} / ${t.budgetLimit || '∞'} Tokens` : 'N/A';
+                
+                let localContextHtml = '';
+                if (t.targetHead === 'Local AI') {
+                    const pct = Math.min(100, Math.round((t.localContextFilled / t.localContextMax) * 100));
+                    const color = pct > 80 ? 'var(--vscode-editorError-foreground)' : (pct > 50 ? 'var(--vscode-terminal-ansiYellow)' : 'var(--vscode-terminal-ansiGreen)');
+                    localContextHtml = `
+                    <div style="margin-top: 10px;">
+                        <span style="font-size: 0.8em; opacity: 0.8; font-weight: bold;">Local Context Window: ${t.localContextFilled} / ${t.localContextMax}</span>
+                        <div style="width: 100%; height: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; overflow: hidden; margin-top: 4px; border: 1px solid var(--vscode-widget-border);">
+                            <div style="width: ${pct}%; height: 100%; background: ${color}; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>`;
+                }
+
+                telemetryHtml += `
+                <div class="card" style="border-left-color: var(--vscode-terminal-ansiYellow);">
+                    <h3 style="margin-bottom: 2px;">${t.agentRole} <span style="font-size: 0.7em; opacity: 0.6; font-weight: normal;">(${t.threadId.substring(0, 8)})</span></h3>
+                    <p style="font-size: 0.8em; margin-bottom: 8px; opacity: 0.7;">Route: ${t.targetHead}</p>
+                    <p style="margin-bottom: 5px;"><strong>Cloud API Burn:</strong> <span style="color: var(--vscode-terminal-ansiCyan); font-family: monospace;">${cloudTokens}</span></p>
+                    ${localContextHtml}
+                </div>`;
+            });
+            telemetryHtml += `</div>`;
+        } else {
+            telemetryHtml = `<div class="empty-state" style="opacity: 0.6;">No agents currently active in the Swarm.</div>`;
+        }
+
         const isWaiting = this._isDecomposing;
         let cardsHtml = '';
 
@@ -173,8 +215,19 @@ export class SwarmWebview {
                         <option value="Local AI" ${contract.targetHead === 'Local AI' ? 'selected' : ''}>Local AI Swarm (Validator/Refactor)</option>
                     </select>
 
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <div style="flex: 1;">
+                            <label>API Budget Limit (Tokens)</label>
+                            <input type="number" class="paths-input" id="budget-${index}" value="${contract.budgetLimit || 100000}" style="width: 100%;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label>Local Context Max (Tokens)</label>
+                            <input type="number" class="paths-input" id="localCtx-${index}" value="${contract.localContextMax || 8192}" style="width: 100%;">
+                        </div>
+                    </div>
+
                     <label>Assigned Task Description</label>
-                    <textarea class="desc-input" id="desc-${index}" rows="4">${contract.taskDescription}</textarea>
+                    <textarea class="desc-input" id="desc-${index}" rows="3">${contract.taskDescription}</textarea>
 
                     <label>Allowed Edit Directories (comma separated)</label>
                     <input type="text" class="paths-input" id="allowed-${index}" value="${Array.isArray(contract.allowedDirectories) ? contract.allowedDirectories.join(', ') : contract.allowedDirectories}">
@@ -187,7 +240,7 @@ export class SwarmWebview {
             cardsHtml += `</div>
 
             <div style="margin-top: 20px; text-align: center;">
-                <button class="btn-primary launch-swarms" onclick="launchSwarm()">
+                <button class="btn-primary launch-swarms" onclick="launchSwarm()" style="width: 100%; max-width: 400px; padding: 15px;">
                     🚀 Dispatch ${this._draftContracts.length} Swarm Worker(s)
                 </button>
             </div>`;
@@ -210,13 +263,14 @@ export class SwarmWebview {
                 .status-board { background: var(--vscode-editorWidget-background); padding: 20px; border-radius: 8px; border: 1px solid var(--vscode-widget-border); margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                 .status-item { font-size: 1.2em; margin-bottom: 12px; font-weight: bold; display: flex; align-items: center; }
 
-                .card { background: var(--vscode-editor-background); border: 1px solid var(--vscode-editorGroup-border); border-left: 4px solid var(--vscode-terminal-ansiCyan); border-radius: 6px; padding: 15px; margin-bottom: 15px; transition: transform 0.2s; }
-                .card:hover { transform: translateX(5px); border-left-color: var(--vscode-terminal-ansiYellow); }
+                .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+                .card { background: var(--vscode-editor-background); border: 1px solid var(--vscode-editorGroup-border); border-left: 4px solid var(--vscode-terminal-ansiCyan); border-radius: 6px; padding: 15px; transition: transform 0.2s; box-sizing: border-box; }
+                .card:hover { transform: translateY(-2px); border-left-color: var(--vscode-terminal-ansiYellow); }
                 .card h3 { margin: 0 0 8px 0; color: var(--vscode-terminal-ansiCyan); font-size: 1.1em; }
                 .card p { margin: 0; opacity: 0.8; font-size: 0.95em; line-height: 1.4; }
 
                 .agent-card { border-left-color: var(--vscode-terminal-ansiGreen); }
-                .agent-card:hover { border-left-color: var(--vscode-terminal-ansiYellow); }
+                .agent-card:hover { border-left-color: var(--vscode-terminal-ansiYellow); transform: none; box-shadow: 0 0 8px rgba(0,0,0,0.2); }
 
                 .empty-state { padding: 30px; text-align: center; opacity: 0.5; font-style: italic; border: 1px dashed var(--vscode-widget-border); border-radius: 8px; }
 
@@ -242,12 +296,17 @@ export class SwarmWebview {
             <h1>💠 Headless Swarm Manager</h1>
 
             <div class="status-board">
-                <h2 style="margin-top: 0;">Engine Status</h2>
+                <h2 style="margin-top: 0;">System Status</h2>
                 <div class="status-item">${statusText}</div>
                 <div class="status-item">${tosStatus}</div>
             </div>
 
-            <div class="megaprompt-container">
+            <div id="live-telemetry">
+                <h2 style="color: var(--vscode-terminal-ansiYellow);">📊 Live Swarm Telemetry</h2>
+                ${telemetryHtml}
+            </div>
+
+            <div class="megaprompt-container" style="margin-top: 30px;">
                 <label style="font-size: 1.1em; opacity: 1; margin-bottom: 10px; display: block; color: var(--vscode-terminal-ansiYellow);">1. Define The Swarm Objective</label>
                 <textarea id="megaprompt" class="megaprompt" placeholder="Example: Refactor the UI into React components and update the backend Express logic to support user login.">${this._lastPrompt}</textarea>
 
@@ -257,12 +316,12 @@ export class SwarmWebview {
             </div>
 
             <div id="swarms-container">
-                <h2 style="margin-bottom: 15px; color: var(--vscode-terminal-ansiCyan);">2. Review Triple-Headed Routing</h2>
+                <h2 style="margin-bottom: 15px; color: var(--vscode-terminal-ansiCyan);">2. Review Triple-Headed Routing & Budgets</h2>
                 ${cardsHtml}
             </div>
 
             <h2>Available Proof of Work (Bolt-Ons)</h2>
-            <div id="boltons-container">
+            <div id="boltons-container" class="card-grid">
                 ${boltOnHtml}
             </div>
 
@@ -292,13 +351,20 @@ export class SwarmWebview {
 
                     cards.forEach(card => {
                         const indexId = card.id.replace('card-', '');
+                        
+                        // Parse numbers safely
+                        const rawBudget = document.getElementById('budget-' + indexId).value;
+                        const rawLocalCtx = document.getElementById('localCtx-' + indexId).value;
+                        
                         contracts.push({
                             threadId: document.getElementById('thread-' + indexId).value,
                             role: document.getElementById('role-' + indexId).value,
                             taskDescription: document.getElementById('desc-' + indexId).value,
                             allowedDirectories: document.getElementById('allowed-' + indexId).value,
                             readOnlyDirectories: document.getElementById('readonly-' + indexId).value,
-                            targetHead: document.getElementById('head-' + indexId).value
+                            targetHead: document.getElementById('head-' + indexId).value,
+                            budgetLimit: parseInt(rawBudget, 10) || 100000,
+                            localContextMax: parseInt(rawLocalCtx, 10) || 8192
                         });
                     });
 

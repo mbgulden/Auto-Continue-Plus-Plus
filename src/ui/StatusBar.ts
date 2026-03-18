@@ -8,7 +8,6 @@ export class StatusBar implements vscode.Disposable {
     private _settingsItem: vscode.StatusBarItem;
     private _cdpItem: vscode.StatusBarItem;
     private _swarmItem: vscode.StatusBarItem;
-    private _megapromptItem: vscode.StatusBarItem;
     private _stateManager: StateManager;
     private _contextTracker?: ContextTracker;
     private _contextHealthDisposable?: vscode.Disposable;
@@ -24,8 +23,8 @@ export class StatusBar implements vscode.Disposable {
         // Create Dashboard quick-access item
         this._dashboardItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
         this._dashboardItem.command = 'auto-continue.dashboard';
-        this._dashboardItem.text = `$(graph) Agents Pro`;
-        this._dashboardItem.tooltip = 'Open Auto-Continue Agent Manager PRO Dashboard';
+        this._dashboardItem.text = `$(graph) Lineage`;
+        this._dashboardItem.tooltip = 'Open Auto-Continue Context Lineage Dashboard';
 
         // Create Settings quick-access item
         this._settingsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 98);
@@ -43,13 +42,7 @@ export class StatusBar implements vscode.Disposable {
         this._swarmItem.text = `$(hub)`;
         this._swarmItem.tooltip = 'Open Swarm Manager Dashboard';
 
-        // Create Megaprompt quick-access item
-        this._megapromptItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 96);
-        this._megapromptItem.command = 'auto-continue.swarm.orchestrate';
-        this._megapromptItem.text = `$(sparkle) Megaprompt`;
-        this._megapromptItem.tooltip = 'Launch Agent Orchestrator Megaprompt';
-
-        context.subscriptions.push(this._statusBarItem, this._dashboardItem, this._settingsItem, this._cdpItem, this._swarmItem, this._megapromptItem);
+        context.subscriptions.push(this._statusBarItem, this._dashboardItem, this._settingsItem, this._cdpItem, this._swarmItem);
 
         // Initial update
         this.update();
@@ -94,17 +87,21 @@ export class StatusBar implements vscode.Disposable {
         if (this._stateManager.isActive) {
             let text = `$(play-circle) Auto-Continue: ON`;
 
-            // We still update background colors based on context health, but remove the text clutter
+            // Inject Context Tracker Health if available
             if (this._contextTracker) {
                 const healthPct = Math.round(this._contextTracker.getHealthPercentage() * 100);
+                let icon = '$(server-environment)';
 
                 if (healthPct >= 90) {
+                    icon = '$(warning)';
                     this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
                 } else if (healthPct >= 75) {
                     this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
                 } else {
                     this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.focusBackground');
                 }
+
+                text = `${icon} Msg/Ctx: ${healthPct}% | ${text}`;
             } else {
                 this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.focusBackground');
             }
@@ -123,7 +120,6 @@ export class StatusBar implements vscode.Disposable {
         this._settingsItem.show();
         this._cdpItem.show();
         this._swarmItem.show();
-        this._megapromptItem.show();
     }
 
     public dispose() {
@@ -135,6 +131,5 @@ export class StatusBar implements vscode.Disposable {
         this._settingsItem.dispose();
         this._cdpItem.dispose();
         this._swarmItem.dispose();
-        this._megapromptItem.dispose();
     }
 }

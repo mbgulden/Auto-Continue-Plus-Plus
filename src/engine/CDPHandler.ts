@@ -55,8 +55,8 @@ export class CDPHandler {
     /**
      * Scans for open WebViews and injects the handler
      */
-    public async scanAndInject(context: vscode.ExtensionContext): Promise<void> {
-        if (!this._isEnabled) return;
+    public async start(context: vscode.ExtensionContext): Promise<void> {
+        this._isEnabled = true;
 
         for (let port = BASE_PORT - PORT_RANGE; port <= BASE_PORT + PORT_RANGE; port++) {
             try {
@@ -74,10 +74,6 @@ export class CDPHandler {
         }
     }
 
-    public async start(): Promise<void> {
-        this._isEnabled = true;
-    }
-
     public async stop(): Promise<void> {
         this._isEnabled = false;
         for (const [id, conn] of this._connections) {
@@ -93,17 +89,15 @@ export class CDPHandler {
      * Executes a script across all currently connected CDP injection targets.
      * Useful for broadcasting events like triggering submit button clicks.
      */
-    public async executeGlobalScript(script: string): Promise<boolean> {
-        if (!this._isEnabled) return false;
+    public async executeGlobalScript(script: string): Promise<void> {
+        if (!this._isEnabled) return;
         const promises: Promise<any>[] = [];
         for (const [id, conn] of this._connections) {
             promises.push(this._evaluate(id, script).catch(e => {
                 console.log(`[Auto-Continue CDP] Global script fail on ${id}:`, e);
-                return null;
             }));
         }
-        const results = await Promise.all(promises);
-        return results.some(r => r && r.value === true);
+        await Promise.all(promises);
     }
 
     private async _getPages(port: number): Promise<any[]> {

@@ -27,6 +27,7 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function main() {
+    // Build Extension Backend
     const ctx = await esbuild.context({
         entryPoints: ['src/extension.ts'],
         bundle: true,
@@ -40,7 +41,6 @@ async function main() {
         external: ['vscode'],
         logLevel: 'silent',
         plugins: [
-            /* add to the end of plugins array */
             esbuildProblemMatcherPlugin,
             {
                 name: 'copy-inject-scripts',
@@ -54,11 +54,25 @@ async function main() {
             }
         ],
     });
+
+    // Build React Webview Frontend (Phase 5.1)
+    const webviewCtx = await esbuild.context({
+        entryPoints: ['src/webview/DashboardApp.tsx'],
+        bundle: true,
+        format: 'iife',
+        minify: production,
+        sourcemap: !production,
+        outfile: 'dist/webview/DashboardApp.js',
+        logLevel: 'silent'
+    });
     if (watch) {
         await ctx.watch();
+        await webviewCtx.watch();
     } else {
         await ctx.rebuild();
         await ctx.dispose();
+        await webviewCtx.rebuild();
+        await webviewCtx.dispose();
     }
 }
 

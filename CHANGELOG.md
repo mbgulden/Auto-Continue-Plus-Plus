@@ -4,33 +4,6 @@ All notable changes to the "Auto-Continue Plus Plus" extension will be documente
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [1.1.22] - 2026-03-16
-
-### Added
-- **Shadow DOM Bypassing:** The CDP `auto-accept` payload now natively pierces complex web components (like `<vscode-button>` and `.monaco-button`), solving silent click failures inside isolated UI trees like Antigravity.
-- **Transparent Overlay Piercing:** The scraper now uses `document.elementFromPoint(cx,cy)` to detect invisible blockers over the Accept buttons. It temporarily disables their `pointer-events`, fires synthetic `PointerEvent` and `MouseEvent` blocks, and restores the overlay to guarantee click delivery.
-- **Enter Key Fallback Safety:** If pointer clicking fails to dismiss a button within 300ms, the bot now falls back to forcing `.focus()` and dispatching a synthetic `Enter` KeyboardEvent natively.
-
-## [1.1.21] - 2026-03-16
-
-### Fixed
-- **UI QuickPick Polling Stall:** Replaced the blind `await`s on native VS Code fallback commands. Previously, triggering `continue.runTerminalCommand` concurrently generated a "Select Python Interpreter" quickpick, causing VS Code to permanently stall the entire polling engine interval on that promise. Fallback commands are now purely non-blocking.
-- **Explicit CDP Offline Status Warnings:** Added a massive visual pop-up warning when users activate the bot without `--remote-debugging-port=9000` attached to their current VS Code window, removing the "silent failure" ambiguity once and for all.
-
-## [1.1.20] - 2026-03-16
-
-### Fixed
-- **Macro Overhaul:** The `CDPHandler` and `PollingEngine` now successfully execute `scanAndInject` continuously instead of only resolving true once. Webviews opened after the auto-run toggle is pressed are now instantly picked up and injected.
-- **Metric Spam Abatement:** The fallback IDE command execution loop in `extension.ts` now suppresses false-positive metric incrementing when no diff buttons exist. Dashboard tracking metrics are now highly deterministic to actual auto-accept button clicks via CDP. 
-
-## [1.1.19] - 2026-03-15
-
-### Fixed
-- **Startup Configuration:** Introduced `autoContinue.enableAtStartup` setting (defaults `false`). It now relies on configs over last-session state.
-- **TOS Deferral:** Extension stays completely quiet and doesn't popup TOS unconditionally at startup.
-- **Improved First-Run Flow:** The TOS verification logic triggers when you explicitly toggle it.
-- **"Don't Show Again" vs "I Agree":** Added permanent and session-level consent management for the TOS prompt.
-
 ## [1.1.6] - 2026-03-10
 
 ### Fixed

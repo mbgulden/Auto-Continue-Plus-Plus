@@ -73,7 +73,7 @@ export class PollingEngine {
         console.log(`[Auto-Continue] Starting polling engine at ${this._currentInterval}ms`);
 
         // Start CDP session injection for DOM Scraping Antigravity Auto-Accept
-        this._cdpHandler.start().catch(e => console.error("[Auto-Continue CDP] Start failed:", e));
+        this._cdpHandler.start(this._context).catch(e => console.error("[Auto-Continue CDP] Start failed:", e));
 
         this._intervalId = setInterval(async () => {
             // Fast fail if not active
@@ -110,9 +110,6 @@ export class PollingEngine {
             if (this._contextHealthCheck) {
                 await this._contextHealthCheck();
             }
-
-            // 0.5 Continuously scan for newly opened Agent Webviews
-            await this._cdpHandler.scanAndInject(this._context);
 
             // 1. Check for pending file diffs / apply
             await this._fileAcceptHandler();

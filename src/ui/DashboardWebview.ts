@@ -7,6 +7,7 @@ import { AntigravityAPI, ModelQuotaStatus } from '../engine/AntigravityAPI';
 export class DashboardWebview {
     public static currentPanel: DashboardWebview | undefined;
     private readonly _panel: vscode.WebviewPanel;
+    private _stateManager: StateManager;
     private _disposables: vscode.Disposable[] = [];
 
     public static escapeHtml(unsafe: string): string {
@@ -19,8 +20,13 @@ export class DashboardWebview {
             .replace(/'/g, "&#039;");
     }
 
+    public getWebview(): vscode.Webview {
+        return this._panel.webview;
+    }
+
     private constructor(panel: vscode.WebviewPanel, stateManager: StateManager, contextTracker: ContextTracker) {
         this._panel = panel;
+        this._stateManager = stateManager;
         this._update(stateManager, contextTracker);
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -61,10 +67,6 @@ export class DashboardWebview {
                         return;
                     case 'openBrainFolder':
                         LineageManager.openBrainFolder(message.id);
-                        return;
-                    case 'toggleUniversalAutoContinue':
-                        stateManager.toggleActive();
-                        DashboardWebview.currentPanel?._update(stateManager, contextTracker);
                         return;
                 }
             },
@@ -125,7 +127,7 @@ export class DashboardWebview {
         } catch (e) { }
 
         this._panel.title = "Agent Manager";
-        this._panel.webview.html = this._getHtmlForWebview(stateManager.isActive, health, stats, activeSessions, globalConversations, burnRate, cost, historyData, quotaHtml);
+        this._panel.webview.html = this._getHtmlForWebview(health, stats, activeSessions, globalConversations, burnRate, cost, historyData, quotaHtml);
     }
 
     public dispose() {
@@ -340,14 +342,17 @@ export class DashboardWebview {
         `;
     }
 
-    private _getHtmlForWebview(isActive: boolean, health: number, stats: any, activeSessions: AgentHeartbeat[], globalConversations: GlobalConversation[], burnRate: number, cost: string, historyData: { timestamp: number, tokens: number }[], quotaHtml: string) {
+    private _getHtmlForWebview(health: number, stats: any, activeSessions: AgentHeartbeat[], globalConversations: GlobalConversation[], burnRate: number, cost: string, historyData: { timestamp: number, tokens: number }[], quotaHtml: string) {
         const liveWorkspacesHtml = this._generateActiveSessionsHtml(activeSessions, health);
         const globalConversationsHtml = this._generateGlobalConversationsHtml(globalConversations);
         const sparklineSvg = this._generateSvgSparkline(historyData);
 
-        const breakerColor = isActive ? 'var(--vscode-testing-iconPassed)' : 'var(--vscode-testing-iconFailed)';
-        const breakerText = isActive ? 'SWARM IS ACTIVE (ON)' : 'SWARM IS PAUSED (OFF)';
-        const breakerBorder = isActive ? 'var(--vscode-testing-iconPassed)' : 'var(--vscode-testing-iconFailed)';
+        // Note: For Phase 5.1, we inject the SPA via script tag.
+        // We retrieve the extensionUri directly from the cached stateManager context
+        const extensionUri = this._stateManager.context.extensionUri;
+        const scriptUri = extensionUri
+            ? this._panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'DashboardApp.js'))
+            : '';
 
         return `<!DOCTYPE html>
             <html lang="en">
@@ -357,6 +362,7 @@ export class DashboardWebview {
                 <title>Power User Agent Manager</title>
                 <style>
                     body { font-family: var(--vscode-font-family); padding: 20px; color: var(--vscode-editor-foreground); }
+                    #root { width: 100%; min-height: 200px; border: 1px dashed var(--vscode-editorGroup-border); padding: 10px; margin-bottom: 20px; }
                     .card { background: var(--vscode-editorWidget-background); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--vscode-widget-border); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                     .bar-container { width: 100%; background: var(--vscode-progressBar-background); border-radius: 10px; overflow: hidden; }
                     .bar { height: 100%; transition: width 0.3s; }
@@ -369,24 +375,13 @@ export class DashboardWebview {
                     .thread-link:hover { text-decoration: underline; color: var(--vscode-textLink-activeForeground); }
                     .sparkline { width: 100%; height: 100px; display: block; border-bottom: 1px dashed var(--vscode-editorGroup-border); }
                     .chart-empty { height: 100px; display: flex; align-items: center; justify-content: center; opacity: 0.5; font-style: italic; border-bottom: 1px dashed var(--vscode-editorGroup-border); }
-                    .breaker-btn { padding: 12px 24px; font-weight: bold; border-radius: 4px; cursor: pointer; border: none; color: white; font-size: 1.1em; transition: opacity 0.2s; background: ${breakerColor}; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-                    .breaker-btn:hover { opacity: 0.8; }
                 </style>
             </head>
             <body>
-                <h1>Agent Manager <span style="font-size: 0.5em; opacity: 0.5; vertical-align: super;">PRO</span></h1>
+                <div id="root"></div>
+                <script src="${scriptUri}"></script>
 
-                <div class="card" style="border-top: 4px solid ${breakerBorder}; background: var(--vscode-editor-background);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <h2 style="margin: 0; color: ${breakerBorder};">⚡ Universal Breaker Switch</h2>
-                            <p style="margin: 4px 0 0 0; font-size: 0.9em; opacity: 0.8;">Controls the auto-accept loop for ALL workspaces globally.</p>
-                        </div>
-                        <button class="breaker-btn" onclick="toggleUniversalAutoContinue()">
-                            ${breakerText}
-                        </button>
-                    </div>
-                </div>
+                <h1>Agent Manager <span style="font-size: 0.5em; opacity: 0.5; vertical-align: super;">PRO</span></h1>
 
                 <div class="card" style="border-top: 3px solid var(--vscode-terminal-ansiCyan);">
                     <h2 style="margin-top: 0;">🟢 Live Agent Fleet (Local Ext)</h2>

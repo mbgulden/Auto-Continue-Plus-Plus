@@ -201,18 +201,25 @@ export class SwarmWebview {
         if (this._draftContracts.length > 0 && !isWaiting) {
             cardsHtml = `<div class="card-grid">`;
             this._draftContracts.forEach((contract, index) => {
+                const safeRole = this._escapeHtml(contract.role);
+                const safeDesc = this._escapeHtml(contract.taskDescription);
+                const safeAllowed = this._escapeHtml(Array.isArray(contract.allowedDirectories) ? contract.allowedDirectories.join(', ') : contract.allowedDirectories);
+                const safeReadOnly = this._escapeHtml(Array.isArray(contract.readOnlyDirectories) ? contract.readOnlyDirectories.join(', ') : contract.readOnlyDirectories);
+                const safeThreadId = this._escapeHtml(contract.threadId);
+                const safeTargetHead = this._escapeHtml(contract.targetHead);
+
                 cardsHtml += `
                 <div class="agent-card card" id="card-${index}">
                     <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
-                        <input type="text" class="role-input" value="${contract.role}" id="role-${index}" placeholder="Agent Role">
+                        <input type="text" class="role-input" value="${safeRole}" id="role-${index}" placeholder="Agent Role">
                         <button class="btn-clear" onclick="deleteCard(${index})" title="Remove Agent">✖</button>
                     </div>
 
                     <label>Target Execution Head</label>
                     <select id="head-${index}" class="paths-input" style="background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); width: 100%; padding: 8px;">
-                        <option value="Antigravity UI" ${contract.targetHead === 'Antigravity UI' ? 'selected' : ''}>Antigravity IDE Sidebar (Queued)</option>
-                        <option value="Headless API" ${contract.targetHead === 'Headless API' ? 'selected' : ''}>Headless API Swarm (Parallel)</option>
-                        <option value="Local AI" ${contract.targetHead === 'Local AI' ? 'selected' : ''}>Local AI Swarm (Validator/Refactor)</option>
+                        <option value="Antigravity UI" ${safeTargetHead === 'Antigravity UI' ? 'selected' : ''}>Antigravity IDE Sidebar (Queued)</option>
+                        <option value="Headless API" ${safeTargetHead === 'Headless API' ? 'selected' : ''}>Headless API Swarm (Parallel)</option>
+                        <option value="Local AI" ${safeTargetHead === 'Local AI' ? 'selected' : ''}>Local AI Swarm (Validator/Refactor)</option>
                     </select>
 
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -227,14 +234,14 @@ export class SwarmWebview {
                     </div>
 
                     <label>Assigned Task Description</label>
-                    <textarea class="desc-input" id="desc-${index}" rows="3">${contract.taskDescription}</textarea>
+                    <textarea class="desc-input" id="desc-${index}" rows="4">${safeDesc}</textarea>
 
                     <label>Allowed Edit Directories (comma separated)</label>
-                    <input type="text" class="paths-input" id="allowed-${index}" value="${Array.isArray(contract.allowedDirectories) ? contract.allowedDirectories.join(', ') : contract.allowedDirectories}">
+                    <input type="text" class="paths-input" id="allowed-${index}" value="${safeAllowed}">
 
                     <label>Read-Only Context Directories (comma separated)</label>
-                    <input type="text" class="paths-input" id="readonly-${index}" value="${Array.isArray(contract.readOnlyDirectories) ? contract.readOnlyDirectories.join(', ') : contract.readOnlyDirectories}">
-                    <input type="hidden" id="thread-${index}" value="${contract.threadId}">
+                    <input type="text" class="paths-input" id="readonly-${index}" value="${safeReadOnly}">
+                    <input type="hidden" id="thread-${index}" value="${safeThreadId}">
                 </div>`;
             });
             cardsHtml += `</div>

@@ -8,6 +8,8 @@ import * as path from 'path';
 import * as https from 'https';
 import { BoltOnRegistry } from '../boltons/BoltOnRegistry';
 import { BudgetManager } from './BudgetManager';
+import { ZeroTrustValidator } from '../security/ZeroTrustValidator';
+import { DashboardWebview } from '../ui/DashboardWebview';
 
 export class SwarmOrchestrator {
     private _handoffProtocol: HandoffProtocol;
@@ -15,19 +17,38 @@ export class SwarmOrchestrator {
     private _lockManager: SwarmLockManager;
     private _boltOnRegistry: BoltOnRegistry;
     private _budgetManager: BudgetManager;
+    private _zeroTrustValidator?: ZeroTrustValidator;
+
+    private _broadcastStream(threadId: string, role: string, message: string, type: 'info' | 'error' | 'success' = 'info') {
+        const panel = DashboardWebview.currentPanel?.getWebview();
+        if (panel) {
+            panel.postMessage({
+                command: 'streamLog',
+                log: {
+                    timestamp: Date.now(),
+                    threadId,
+                    role,
+                    message,
+                    type
+                }
+            });
+        }
+    }
 
     constructor(
         handoffProtocol: HandoffProtocol,
         contractManager: ContractManager,
         lockManager: SwarmLockManager,
         boltOnRegistry: BoltOnRegistry,
-        budgetManager: BudgetManager
+        budgetManager: BudgetManager,
+        zeroTrustValidator?: ZeroTrustValidator
     ) {
         this._handoffProtocol = handoffProtocol;
         this._contractManager = contractManager;
         this._lockManager = lockManager;
         this._boltOnRegistry = boltOnRegistry;
         this._budgetManager = budgetManager;
+        this._zeroTrustValidator = zeroTrustValidator;
     }
 
     /**
@@ -139,18 +160,24 @@ export class SwarmOrchestrator {
                 return;
             }
 
+            let resolved = false;
+            let pollInterval: NodeJS.Timeout;
+
             const watcher = fs.watch(path.dirname(contractPath), (eventType, filename) => {
                 if (eventType === 'rename' && filename === `${task.threadId}.json`) {
-                    if (!fs.existsSync(contractPath)) {
+                    if (!fs.existsSync(contractPath) && !resolved) {
+                        resolved = true;
                         watcher.close();
+                        clearInterval(pollInterval);
                         resolve();
                     }
                 }
             });
 
             // Fallback polling just in case fs.watch misses the event on some platforms
-            const pollInterval = setInterval(() => {
-                if (!fs.existsSync(contractPath)) {
+            pollInterval = setInterval(() => {
+                if (!fs.existsSync(contractPath) && !resolved) {
+                    resolved = true;
                     clearInterval(pollInterval);
                     watcher.close();
                     resolve();
@@ -310,12 +337,15 @@ The JSON schema MUST be an array of objects matching this exact structure:
      */
     private async _executeHeadlessAPI(contract: AgentContract): Promise<void> {
         console.log(`[Headless API] Starting Swarm Worker: ${contract.role} (${contract.threadId})`);
+        this._broadcastStream(contract.threadId, contract.role, 'Started Headless AI Agent.');
+
         const config = vscode.workspace.getConfiguration('autoContinue');
         const apiKey = config.get<string>('geminiApiKey');
 
         if (!apiKey) {
             console.error('[Headless API] Gemini API Key is missing.');
             vscode.window.showErrorMessage('[Headless API] Failed to start Swarm Worker: Gemini API Key is missing.');
+            this._broadcastStream(contract.threadId, contract.role, 'Failed: Missing API Key', 'error');
             return;
         }
 
@@ -325,7 +355,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
         // Map BoltOns to Gemini Tools
         const allBoltOns = this._boltOnRegistry.getAll();
         const geminiTools = [{
-            function_declarations: allBoltOns.map(boltOn => {
+            functionDeclarations: allBoltOns.map(boltOn => {
                 let schema;
                 if (boltOn.id === 'file_reader_writer') {
                     schema = {
@@ -371,9 +401,6 @@ The JSON schema MUST be an array of objects matching this exact structure:
         let history: any[] = [{ role: "user", parts: [{ text: "Begin execution." }] }];
         let maxIterations = 15;
         let iteration = 0;
-
-        let consecutiveFailures = 0;
-        let lastErrorMsg = '';
 
         while (iteration < maxIterations) {
             iteration++;
@@ -460,6 +487,7 @@ The JSON schema MUST be an array of objects matching this exact structure:
                     hasFunctionCall = true;
                     const call = part.functionCall;
                     console.log(`[Headless API] Agent ${contract.role} executing tool: ${call.name}`);
+                    this._broadcastStream(contract.threadId, contract.role, `Executing tool: ${call.name}`);
 
                     try {
                         const boltOn = this._boltOnRegistry.get(call.name);
@@ -483,8 +511,19 @@ The JSON schema MUST be an array of objects matching this exact structure:
                             context: contextObj
                         };
 
+                        if (this._zeroTrustValidator) {
+                            this._zeroTrustValidator.validateExecutionStart(boltOn, state);
+                        }
+
                         const result = await boltOn.execute(state);
 
+                        if (this._zeroTrustValidator) {
+                            this._zeroTrustValidator.validateExecutionEnd(boltOn, result);
+                        }
+
+                        this._broadcastStream(contract.threadId, contract.role, `Tool returned: ${result.success ? 'Success' : 'Failed'}`);
+
+                        // Push function response to history
                         history.push({
                             role: "function",
                             parts: [{
@@ -494,29 +533,10 @@ The JSON schema MUST be an array of objects matching this exact structure:
                                 }
                             }]
                         });
-                        
-                        // Reset failure counter on success
-                        consecutiveFailures = 0;
-                        lastErrorMsg = '';
-
                     } catch (e: any) {
                         console.error(`[Headless API] Tool execution failed: ${e.message}`);
                         vscode.window.showErrorMessage(`[Headless API] Tool execution failed for ${contract.role}: ${e.message}`);
-                        
-                        // Anti-Spiral Protocol
-                        if (e.message === lastErrorMsg) {
-                            consecutiveFailures++;
-                        } else {
-                            consecutiveFailures = 1;
-                            lastErrorMsg = e.message;
-                        }
-
-                        if (consecutiveFailures >= 2) {
-                            vscode.window.showErrorMessage(`[Headless API] Anti-Spiral Protocol triggered for ${contract.role}. Agent failed with the same error twice in a row. Terminating execution.`);
-                            taskComplete = true;
-                            break; // Break out of the parts loop
-                        }
-
+                        this._broadcastStream(contract.threadId, contract.role, `Tool Error: ${e.message}`, 'error');
                         history.push({
                             role: "function",
                             parts: [{

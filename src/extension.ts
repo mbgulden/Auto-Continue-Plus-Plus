@@ -18,29 +18,28 @@ import { BoltOnRegistry } from './boltons/BoltOnRegistry';
 import { ZeroTrustValidator } from './security/ZeroTrustValidator';
 import { FileReaderWriterBoltOn } from './boltons/impl/FileReaderWriterBoltOn';
 import { BudgetManager } from './engine/BudgetManager';
+import { UnitTestingBoltOn } from './boltons/impl/UnitTestingBoltOn';
 
 /**
- * Validates the Global Terms of Service.
+ * Validates the Global Terms of Service at extension startup.
  * @param context The extension context to read global state from.
  * @returns {Promise<boolean>} True if the user consented, false otherwise.
  */
 async function checkGlobalTOS(context: vscode.ExtensionContext): Promise<boolean> {
     const TOS_KEY = 'autoContinue.globalTOSAgreed';
-    const hasAgreedForever = context.globalState.get<boolean>(TOS_KEY, false);
+    const hasAgreed = context.globalState.get<boolean>(TOS_KEY, false);
 
-    if (hasAgreedForever) return true;
+    if (hasAgreed) return true;
 
     // Extract dynamic version from package.json
     const extensionVersion = context.extension.packageJSON.version || "Unknown";
 
     const tosMessage = `[Auto-Continue Plus Plus v${extensionVersion}] By using this extension, you acknowledge that it actively automates AI actions, automatically accepts diffs on your behalf, and seamlessly synchronizes AI conversation data across your workspace to support multi-environment roaming. The author is not liable for data loss or unintended AI agent behavior. Do you agree to these terms?`;
 
-    const selection = await vscode.window.showWarningMessage(tosMessage, "I Agree", "Don't Show Again", "Decline");
+    const selection = await vscode.window.showWarningMessage(tosMessage, "I Agree", "Decline");
 
-    if (selection === "Don't Show Again") {
+    if (selection === "I Agree") {
         await context.globalState.update(TOS_KEY, true);
-        return true;
-    } else if (selection === "I Agree") {
         return true;
     }
 
@@ -80,7 +79,10 @@ export function activate(context: vscode.ExtensionContext) {
     const fileReaderWriter = new FileReaderWriterBoltOn(contractManager, lockManager);
     boltOnRegistry.register(fileReaderWriter);
 
-    const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager, boltOnRegistry, budgetManager);
+    const unitTestingBoltOn = new UnitTestingBoltOn();
+    boltOnRegistry.register(unitTestingBoltOn);
+
+    const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager, boltOnRegistry, budgetManager, zeroTrustValidator);
 
     // Provide initial UI state for CDP
     cdpHandler.isCDPAvailable().then(isActive => statusBar.setCdpStatus(isActive));
@@ -115,18 +117,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Helper to attempt running the accepting commands ensuring the webview can process them
     const executeAcceptCommands = async (commandsList: string[]): Promise<boolean> => {
-        // We no longer `await` blindly here because some VS Code extensions 
-        // return Promises that hang indefinitely if they pop up a QuickPick UI (e.g. "Select Python Interpreter").
-        // We fire and forget with aggressive catching.
+        let executed = false;
         for (const cmd of commandsList) {
-            vscode.commands.executeCommand(cmd).then(undefined, (e) => {
-                // Silently ignore command missing errors
+            try {
+                await vscode.commands.executeCommand(cmd);
+                executed = true;
+            } catch (e: any) {
+                // Silently ignore "command not found" errors as extensions lazily load,
+                // but log other potential issues if necessary.
                 if (e && e.message && !e.message.includes('not found')) {
                     console.debug(`[Auto-Continue] Command ${cmd} failed:`, e.message);
                 }
-            });
+            }
         }
-        return false;
+        return executed;
     };
 
     // Dynamic File Accept Handler
@@ -135,16 +139,45 @@ export function activate(context: vscode.ExtensionContext) {
         if (handoffProtocol.isHandingOff) return;
 
         try {
-            // We heavily reduced the blind command list to prevent accidental side effects
-            // (like triggering the Python Interpreter selector) from other installed extensions.
             const knownCommands = [
                 // --- Antigravity ---
+                // Native Auto-Accept commands that work even when webview is backgrounded/minified
                 'antigravity.agent.acceptAgentStep',
                 'antigravity.command.accept',
-                'antigravity.prioritized.agentAcceptFocusedHunk'
+                'antigravity.prioritized.agentAcceptFocusedHunk',
+
+                // --- Cline ---
+                'cline.acceptAll',
+                'cline.acceptAllFiles',
+                'cline.acceptAllDiffs',
+                'cline.acceptDiff',
+                'cline.acceptTask',
+
+                // --- Roo Code ---
+                'roo-cline.acceptAll',
+                'roo-cline.acceptAllFiles',
+                'roo-cline.acceptAllDiffs',
+                'roo-cline.acceptDiff',
+                'roo-cline.acceptTask',
+
+                // --- Continue ---
+                'continue.acceptAll',
+                'continue.acceptAllDiffs',
+                'continue.acceptDiff',
+
+                // --- Cursor ---
+                'cursor.acceptAll',
+                'cursor.acceptDiff'
             ];
 
-            await executeAcceptCommands(knownCommands);
+            const accepted = await executeAcceptCommands(knownCommands);
+
+            if (accepted) {
+                watchdog.ping(); // Agent is alive!
+                contextTracker.markAgentActivity();
+                statusBar.update();
+                stateManager.incrementStat('files');
+            }
         } catch (e) { }
     };
 
@@ -157,10 +190,42 @@ export function activate(context: vscode.ExtensionContext) {
                 // --- Antigravity ---
                 'antigravity.terminalCommand.accept',
                 'antigravity.agent.acceptAgentStep',
-                'antigravity.command.accept'
+                'antigravity.command.accept',
+
+                // --- Cline ---
+                'cline.confirmCommand',
+                'cline.runCommand',
+                'cline.runTerminalCommand',
+                'cline.acceptCommand',
+                'cline.proceed',
+
+                // --- Roo Code ---
+                'roo-cline.confirmCommand',
+                'roo-cline.runCommand',
+                'roo-cline.runTerminalCommand',
+                'roo-cline.acceptCommand',
+                'roo-cline.proceed',
+
+                // --- Continue ---
+                'continue.confirmCommand',
+                'continue.acceptTerminalCommand',
+                'continue.runTerminalCommand',
+
+                // --- Cursor ---
+                'cursor.confirmCommand',
+                'cursor.runCommand'
             ];
 
-            await executeAcceptCommands(knownTerminalCommands);
+            const executed = await executeAcceptCommands(knownTerminalCommands);
+
+            if (executed) {
+                watchdog.ping(); // Agent is making moves!
+                contextTracker.markAgentActivity();
+                contextTracker.addEstimatedTokens(100);
+                statusBar.update();
+                stateManager.incrementStat('commands');
+            }
+
         } catch (e) { }
     };
 
@@ -180,28 +245,17 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     const toggleCommand = vscode.commands.registerCommand('auto-continue.toggle', async () => {
-        if (!stateManager.isActive) {
-            // Turning ON - must check TOS every time (unless "Don't Show Again" was previously checked)
-            const agreed = await checkGlobalTOS(context);
-            if (!agreed) {
-                return;
-            }
+        const agreed = await checkGlobalTOS(context);
+        if (!agreed) {
+            return;
         }
 
         stateManager.toggleActive();
         statusBar.update();
 
         if (stateManager.isActive) {
-            const isCdpAvailable = await cdpHandler.isCDPAvailable();
-            if (!isCdpAvailable && !vscode.env.remoteName) {
-                vscode.window.showWarningMessage('Auto-Continue Warning: Swarm CDP is OFFLINE. The auto-accept feature requires the CDP Debugging tool. Please click "Enable Swarm CDP" in your status bar to restart VS Code locally with the required port.');
-            } else if (!isCdpAvailable && vscode.env.remoteName) {
-                vscode.window.showWarningMessage('Auto-Continue Warning: You are connected via Remote SSH. Please manually restart your LOCAL VS Code window with the "--remote-debugging-port=9000" flag before connecting, or auto-accept will fail.');
-            }
-
             pollingEngine.start();
             watchdog.start();
-            syncEngine.runContinuousSync();
         } else {
             pollingEngine.stop();
             watchdog.stop();
@@ -295,29 +349,29 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Decide startup state based on enableAtStartup config
-    if (stateManager.isActive) {
-        // Only start if they agree to TOS
-        checkGlobalTOS(context).then(tosAgreed => {
-            if (tosAgreed) {
-                pollingEngine.start();
-                watchdog.start();
-                syncEngine.runContinuousSync();
-            } else {
-                stateManager.forceState(false);
-                statusBar.update();
-            }
-        });
-    }
-
-    // The interval is always running but only does work when active
-    const SYNC_INTERVAL_MS = 5 * 60 * 1000;
-    const syncInterval = setInterval(() => {
-        if (stateManager.isActive) {
-            syncEngine.runContinuousSync();
+    // Start the process asynchronously so we don't block extension activation
+    checkGlobalTOS(context).then(tosAgreed => {
+        // If enabled on startup AND agreed to TOS, start engines immediately
+        if (stateManager.isActive && tosAgreed) {
+            pollingEngine.start();
+            watchdog.start();
         }
-    }, SYNC_INTERVAL_MS);
-    context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
+
+        // Set up a background timer for Continuous Sync (every 5 minutes)
+        if (tosAgreed) {
+            // Run an initial sync immediately upon load
+            syncEngine.runContinuousSync();
+
+            const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+            const syncInterval = setInterval(() => {
+                if (stateManager.isActive) {
+                    syncEngine.runContinuousSync();
+                }
+            }, SYNC_INTERVAL_MS);
+
+            context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
+        }
+    });
 }
 
 export function deactivate() {

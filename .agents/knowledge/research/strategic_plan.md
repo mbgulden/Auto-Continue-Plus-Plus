@@ -56,3 +56,5 @@ To evolve the MVP dashboard into the ultimate command center:
 3. **Local AI Ecosystem Sync:** Seamlessly detect and list local models (LM Studio, Ollama) directly in the UI for rapid selection.
 4. **Context & Memory Limits Tracking:** Track task context limits. If a local model approaches its hallucination limit, automatically dump state and summarize before continuing.
 5. **Interactive UI Controls:** Provide an "Emergency Brakes" toggle, edit active prompts, and inject human "nudges" mid-execution.
+6. **Context & Persistent Memory Sync (The Hive Mind):** Implement a persistent vector or document store within `.agents/knowledge/persistent/`. When any agent finishes a complex task, it should execute a `KnowledgeSyncBoltOn` to append its key learnings so future agents don't start from scratch.
+7. **Hard Budgets & Cost Telemetry:** Add a `BudgetManager` to `SwarmOrchestrator.ts`. The UI should allow users to set a strict limit per task, and provide a visual token-burn speedometer directly in the `SwarmWebview`.

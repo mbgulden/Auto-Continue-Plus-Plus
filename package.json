@@ -1,7 +1,7 @@
 {
-    "name": "auto-continue-plus-plus",
-    "displayName": "Auto-Continue Plus Plus",
-    "description": "Advanced Auto-Accept Agent with Multi-Tab and Recovery features.",
+    "name": "antigravity-orchestration-hub",
+    "displayName": "Antigravity Orchestration Hub",
+    "description": "The central Hub for hybrid-cloud Swarm Orchestration, Local AI routing, and strict Zero-Trust Agent validation within Google Antigravity.",
     "version": "1.1.17",
     "publisher": "mbgulden",
     "repository": {

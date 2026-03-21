@@ -55,6 +55,19 @@ To make this extension universally useful, users shouldn't have to write complex
   - `Context Library`: A pre-installed set of instructions, documentation links, or best-practice `.md` files specific to that role.
 - **Marketplace:** Users can share, import, or download these pre-packaged "Employees" to instantly staff their Swarm.
 
+### The Bidirectional "Persona Adapter" (Phase 4)
+To ensure maximum inclusivity without sacrificing Antigravity's superior `.md` context-pruning memory networks, the Hub features a universal bidirectional adapter:
+- **Import:** Users can import heavy, monolithic prompt files (like OpenClaw's `soul.md` or custom GPT JSONs). The Hub uses Gemini Flash to instantly parse these monolithic files, extract the core directives, and recompile them into optimized `.ag-persona` files pointing to segmented `.agents/knowledge/` files. This prevents context bloat while keeping the agent's "soul" intact.
+- **Export:** If a user perfects a highly capable agent personality within the Antigravity Hub, they can export the `.ag-persona` and its associated knowledge base directly into a universal `soul.md` format or a Vertex AI agent JSON schema for use outside of VS Code.
+
+## 7.4 The "Global Brain + Filter" Knowledge Model
+A common mistake in agent architectures is creating isolated folders for each individual agent (e.g., `ag-persona/agent-A-knowledge`, `ag-persona/agent-B-workflows`). This causes massive bloat and prevents agents from "learning" from each other.
+
+Antigravity Orchestration Hub utilizes the **"Global Brain + Scoped Access Tags"** model instead:
+- **The Global Brain:** All knowledge, workflows, and learned skills live in a single centralized repository (e.g., `.agents/knowledge/` and `.agents/workflows/`).
+- **The Persona Filter:** The `.ag-persona` file simply contains *pointers* or *tags* (a role-based access control list) indicating which global skills and workflows that specific agent is allowed to access.
+- **The Benefit:** When one Specialist learns a new workflow and documents it in the Global Brain, *all* other agents with that specific "Tag" instantly inherit the new knowledge without needing to duplicate files. It creates an ecosystem where the Swarm gets collectively smarter without compounding context bloat.
+
 ---
 
 ## 7.3 Enterprise Ecosystem Integrations (Vertex AI & GCP)

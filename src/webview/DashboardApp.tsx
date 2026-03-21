@@ -18,7 +18,7 @@ const App = () => {
             const message = event.data;
 
             if (message.command === 'streamLog') {
-                setLogs((prevLogs) => {
+                setLogs((prevLogs: SwarmLog[]) => {
                     const newLogs = [message.log, ...prevLogs];
                     return newLogs.slice(0, 50); // Keep last 50 logs
                 });
@@ -72,7 +72,7 @@ const App = () => {
                             Waiting for Swarm activity...
                         </div>
                     ) : (
-                        logs.map((log, index) => (
+                        logs.map((log: SwarmLog, index: number) => (
                             <div key={index} style={{ marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed var(--vscode-editorGroup-border)' }}>
                                 <span style={{ opacity: 0.6, marginRight: '10px' }}>
                                     [{new Date(log.timestamp).toLocaleTimeString()}]

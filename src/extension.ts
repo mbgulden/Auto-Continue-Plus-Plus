@@ -17,6 +17,9 @@ import * as cp from 'child_process';
 import { BoltOnRegistry } from './boltons/BoltOnRegistry';
 import { ZeroTrustValidator } from './security/ZeroTrustValidator';
 import { FileReaderWriterBoltOn } from './boltons/impl/FileReaderWriterBoltOn';
+import { BudgetManager } from './engine/BudgetManager';
+import { ExternalBoltOnAdapter } from './engine/adapters/ExternalBoltOnAdapter';
+import { IAgentBoltOn } from './api';
 import { UnitTestingBoltOn } from './boltons/impl/UnitTestingBoltOn';
 
 /**
@@ -52,7 +55,7 @@ async function checkGlobalTOS(context: vscode.ExtensionContext): Promise<boolean
  * This method is called when the extension is activated.
  */
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Auto-Continue Plus Plus is now initializing.');
+    console.log('Antigravity Orchestration Hub is now initializing.');
 
     // Initialize Security and State
     const stateManager = new StateManager(context);
@@ -60,6 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
     const contextTracker = new ContextTracker(stateManager);
     const syncEngine = new SyncEngine(context);
     const cdpHandler = new CDPHandler();
+    const budgetManager = BudgetManager.getInstance(stateManager);
 
     // Initialize UI Features
     const statusBar = new StatusBar(context, stateManager);
@@ -80,7 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
     const unitTestingBoltOn = new UnitTestingBoltOn();
     boltOnRegistry.register(unitTestingBoltOn);
 
-    const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager, boltOnRegistry, zeroTrustValidator);
+    const swarmOrchestrator = new SwarmOrchestrator(handoffProtocol, contractManager, lockManager, boltOnRegistry, budgetManager, zeroTrustValidator);
 
     // Provide initial UI state for CDP
     cdpHandler.isCDPAvailable().then(isActive => statusBar.setCdpStatus(isActive));
@@ -283,7 +287,7 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage('You must agree to the Terms of Service to use the Swarm.');
             return;
         }
-        SwarmWebview.createOrShow(swarmOrchestrator, stateManager, boltOnRegistry);
+        SwarmWebview.createOrShow(swarmOrchestrator, stateManager, boltOnRegistry, budgetManager);
     });
 
     const enableCDPCommand = vscode.commands.registerCommand('auto-continue.enableCDP', async () => {
@@ -336,6 +340,23 @@ export function activate(context: vscode.ExtensionContext) {
         { dispose: () => lockManager.dispose() }
     );
 
+    // --- Phase 2: Public Plugin Interface API ---
+    // Expose the BoltOnRegistry so external VS Code extensions can register their tools
+    const publicApi = {
+        registerBoltOn: (boltOn: IAgentBoltOn) => {
+            // Very simple runtime shape-check to enforce the Interface
+            if (!boltOn.id || typeof boltOn.execute !== 'function') {
+                console.error(`[Orchestration Hub] External extension attempted to register an invalid Bolt-On. Rejected.`);
+                return false;
+            }
+            // Safely wrap the external plugin with the internal adapter so it passes ZeroTrust validation
+            const adapter = new ExternalBoltOnAdapter(boltOn);
+            boltOnRegistry.register(adapter);
+            console.log(`[Orchestration Hub] External plugin safely wrapped and registered as Bolt-On: ${boltOn.id}`);
+            return true;
+        }
+    };
+
     // Provide an Audit Trail / Hard Enforcement for Swarm Locks
     context.subscriptions.push(
         vscode.workspace.onWillSaveTextDocument(e => {
@@ -370,8 +391,10 @@ export function activate(context: vscode.ExtensionContext) {
             context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
         }
     });
+
+    return publicApi;
 }
 
 export function deactivate() {
-    console.log('Auto-Continue Plus Plus deactivated.');
+    console.log('Antigravity Orchestration Hub deactivated.');
 }

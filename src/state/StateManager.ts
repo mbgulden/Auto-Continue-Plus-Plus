@@ -33,6 +33,11 @@ export class StateManager {
     private _onDidChangeStats = new vscode.EventEmitter<AutoContinueStats>();
     public readonly onDidChangeStats = this._onDidChangeStats.event;
 
+    // New telemetry event for the UI
+    private _telemetry: any[] = [];
+    private _onDidChangeTelemetry = new vscode.EventEmitter<any[]>();
+    public readonly onDidChangeTelemetry = this._onDidChangeTelemetry.event;
+
     constructor(context: vscode.ExtensionContext) {
         this._context = context;
         this._isActive = this._context.globalState.get<boolean>(this.STATE_KEY, false);
@@ -57,6 +62,15 @@ export class StateManager {
      */
     public get isActive(): boolean {
         return this._isActive;
+    }
+
+    public updateTelemetry(telemetry: any[]): void {
+        this._telemetry = telemetry;
+        this._onDidChangeTelemetry.fire(this._telemetry);
+    }
+
+    public getTelemetry(): any[] {
+        return this._telemetry;
     }
 
     /**
@@ -182,5 +196,6 @@ export class StateManager {
 
     public dispose() {
         this._onDidChangeStats.dispose();
+        this._onDidChangeTelemetry.dispose();
     }
 }

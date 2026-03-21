@@ -22,6 +22,7 @@ import { ZeroTrustValidator } from './security/ZeroTrustValidator';
 import { FileReaderWriterBoltOn } from './boltons/impl/FileReaderWriterBoltOn';
 import { BudgetManager } from './engine/BudgetManager';
 import { UnitTestingBoltOn } from './boltons/impl/UnitTestingBoltOn';
+import { ExternalBoltOnAdapter } from './boltons/ExternalBoltOnAdapter';
 
 import { checkGlobalTOS } from './utils/tos';
 import { registerToggleCommand } from './commands/ToggleCommand';
@@ -281,6 +282,16 @@ export function activate(context: vscode.ExtensionContext) {
             }, SYNC_INTERVAL_MS);
 
             context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
+        }
+    });
+
+    // Provide the Orchestration API for Spoke extensions
+    return Object.freeze({
+        registerBoltOn: (boltOn: any) => {
+            console.log(`[Antigravity Hub] Received external Spoke registration: ${boltOn.name || boltOn.id}`);
+            const adapter = new ExternalBoltOnAdapter(boltOn);
+            boltOnRegistry.register(adapter);
+            vscode.window.showInformationMessage(`Antigravity Hub: Successfully loaded Spoke '${boltOn.name || boltOn.id}'`);
         }
     });
 }

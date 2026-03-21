@@ -1,14 +1,14 @@
 {
-    "name": "auto-continue-plus-plus",
-    "displayName": "Auto-Continue Plus Plus",
-    "description": "Advanced Auto-Accept Agent with Multi-Tab and Recovery features.",
+    "name": "antigravity-orchestration-hub",
+    "displayName": "Antigravity Orchestration Hub",
+    "description": "The central Hub plugin for the Multi-Agent Antigravity ecosystem.",
     "version": "1.1.43",
     "publisher": "mbgulden",
+    "icon": "assets/icon.png",
     "repository": {
         "type": "git",
         "url": "https://github.com/mbgul/Auto-Continue-Plus-Plus"
     },
-    "icon": "images/icon.png",
     "galleryBanner": {
         "color": "#1e1e1e",
         "theme": "dark"

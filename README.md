@@ -1,8 +1,8 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/mbgul/Auto-Continue-Plus-Plus/main/images/banner.png" alt="Auto-Continue Plus Plus Banner" />
+  <img src="assets/banner.png" alt="Antigravity Orchestration Hub Banner" width="800" />
 </div>
 
-<h1 align="center">Auto-Continue Plus Plus</h1>
+<h1 align="center">Antigravity Orchestration Hub</h1>
 
 <div align="center">
   <strong>The Advanced Auto-Accept Agent for relentless coding automation.</strong>
@@ -18,7 +18,7 @@
 
 <br>
 
-**Auto-Continue Plus Plus** is a premium, high-performance VS Code extension designed specifically to supercharge **Google Antigravity**. Say goodbye to constantly hitting "Accept" in the terminal—this agent handles it for you, across multiple tabs, with built-in recovery systems to ensure you never get stuck.
+**Antigravity Orchestration Hub** is a premium, high-performance VS Code extension designed specifically to supercharge **Google Antigravity**. Say goodbye to constantly hitting "Accept" in the terminal—this agent handles it for you, across multiple tabs, with built-in recovery systems to ensure you never get stuck.
 
 ## ✨ Features
 
@@ -58,7 +58,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## ☕ Fund the AI Compute Addiction
 
-Creating tools to endlessly feed AI agents requires... well, endless compute! If **Auto-Continue Plus Plus** has saved your fingers from repetitive strain injury or saved you hours of manual clicking, consider fueling my AI addiction:
+Creating tools to endlessly feed AI agents requires... well, endless compute! If **Antigravity Orchestration Hub** has saved your fingers from repetitive strain injury or saved you hours of manual clicking, consider fueling my AI addiction:
 
 [![Fund the Compute Addiction](https://img.shields.io/badge/Fund_My_Compute_Addiction-%23635BFF.svg?logo=stripe&logoColor=white)](https://buy.stripe.com/14A8wQ3ypbB2cC27lAd3i05)
 

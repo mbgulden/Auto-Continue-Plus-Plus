@@ -1,6 +1,4 @@
 import * as esbuild from 'esbuild';
-import * as fs from 'fs';
-import * as path from 'path';
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
@@ -41,17 +39,7 @@ async function main() {
         external: ['vscode'],
         logLevel: 'silent',
         plugins: [
-            esbuildProblemMatcherPlugin,
-            {
-                name: 'copy-inject-scripts',
-                setup(build) {
-                    build.onEnd(() => {
-                        const targetDir = 'dist/src/engine/inject';
-                        fs.mkdirSync(targetDir, { recursive: true });
-                        fs.copyFileSync('src/engine/inject/auto_accept.js', path.join(targetDir, 'auto_accept.js'));
-                    });
-                }
-            }
+            esbuildProblemMatcherPlugin
         ],
     });
 
@@ -65,14 +53,32 @@ async function main() {
         outfile: 'dist/webview/DashboardApp.js',
         logLevel: 'silent'
     });
+
+    // Build Injection Scripts
+    const injectCtx = await esbuild.context({
+        entryPoints: ['src/engine/inject/auto_accept.ts'],
+        bundle: true,
+        format: 'iife',
+        minify: production,
+        sourcemap: !production,
+        outfile: 'dist/src/engine/inject/auto_accept.js',
+        logLevel: 'silent',
+        plugins: [
+            esbuildProblemMatcherPlugin
+        ]
+    });
+
     if (watch) {
         await ctx.watch();
         await webviewCtx.watch();
+        await injectCtx.watch();
     } else {
         await ctx.rebuild();
         await ctx.dispose();
         await webviewCtx.rebuild();
         await webviewCtx.dispose();
+        await injectCtx.rebuild();
+        await injectCtx.dispose();
     }
 }
 

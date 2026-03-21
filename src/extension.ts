@@ -14,39 +14,23 @@ import { SwarmOrchestrator } from './engine/SwarmOrchestrator';
 import { CDPHandler } from './engine/CDPHandler';
 import { SwarmWebview } from './ui/SwarmWebview';
 import * as cp from 'child_process';
+import * as os from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
 import { BoltOnRegistry } from './boltons/BoltOnRegistry';
 import { ZeroTrustValidator } from './security/ZeroTrustValidator';
 import { FileReaderWriterBoltOn } from './boltons/impl/FileReaderWriterBoltOn';
 import { BudgetManager } from './engine/BudgetManager';
 import { UnitTestingBoltOn } from './boltons/impl/UnitTestingBoltOn';
 
-/**
- * Validates the Global Terms of Service at extension startup.
- * @param context The extension context to read global state from.
- * @returns {Promise<boolean>} True if the user consented, false otherwise.
- */
-async function checkGlobalTOS(context: vscode.ExtensionContext): Promise<boolean> {
-    const TOS_KEY = 'autoContinue.globalTOSAgreed';
-    const hasAgreed = context.globalState.get<boolean>(TOS_KEY, false);
-
-    if (hasAgreed) return true;
-
-    // Extract dynamic version from package.json
-    const extensionVersion = context.extension.packageJSON.version || "Unknown";
-
-    const tosMessage = `[Auto-Continue Plus Plus v${extensionVersion}] By using this extension, you acknowledge that it actively automates AI actions, automatically accepts diffs on your behalf, and seamlessly synchronizes AI conversation data across your workspace to support multi-environment roaming. The author is not liable for data loss or unintended AI agent behavior. Do you agree to these terms?`;
-
-    const selection = await vscode.window.showWarningMessage(tosMessage, "I Agree", "Decline");
-
-    if (selection === "I Agree") {
-        await context.globalState.update(TOS_KEY, true);
-        return true;
-    }
-
-    // User declined
-    vscode.window.showWarningMessage("Auto-Continue Plus Plus requires TOS acceptance to function. The extension will remain paused and idle.");
-    return false;
-}
+import { checkGlobalTOS } from './utils/tos';
+import { registerToggleCommand } from './commands/ToggleCommand';
+import { registerSettingsCommand } from './commands/SettingsCommand';
+import { registerDashboardCommand } from './commands/DashboardCommand';
+import { registerForceSyncCommand } from './commands/ForceSyncCommand';
+import { registerSpawnSwarmCommand } from './commands/SpawnSwarmCommand';
+import { registerEnableCDPCommand } from './commands/EnableCDPCommand';
+import { registerCreateShortcutCommand } from './commands/CreateShortcutCommand';
 
 /**
  * Extension entry point.
@@ -244,87 +228,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    const toggleCommand = vscode.commands.registerCommand('auto-continue.toggle', async () => {
-        const agreed = await checkGlobalTOS(context);
-        if (!agreed) {
-            return;
-        }
-
-        stateManager.toggleActive();
-        statusBar.update();
-
-        if (stateManager.isActive) {
-            pollingEngine.start();
-            watchdog.start();
-        } else {
-            pollingEngine.stop();
-            watchdog.stop();
-        }
-    });
-
-    const settingsCommand = vscode.commands.registerCommand('auto-continue.settings', () => {
-        vscode.commands.executeCommand('workbench.action.openSettings', 'Auto-Continue');
-    });
-
-    const dashboardCommand = vscode.commands.registerCommand('auto-continue.dashboard', () => {
-        DashboardWebview.createOrShow(stateManager, contextTracker);
-    });
-
-    const forceSyncCommand = vscode.commands.registerCommand('auto-continue.forceSync', async () => {
-        if (!context.globalState.get('autoContinue.globalTOSAgreed', false)) {
-            vscode.window.showErrorMessage('You must agree to the Terms of Service to sync.');
-            return;
-        }
-        await syncEngine.runContinuousSync();
-        vscode.window.showInformationMessage('Auto-Continue Sync: Bidirectional sync complete.');
-    });
-
-    const spawnSwarmCommand = vscode.commands.registerCommand('auto-continue.swarm.spawnDelegates', async () => {
-        const agreed = await checkGlobalTOS(context);
-        if (!agreed) {
-            vscode.window.showErrorMessage('You must agree to the Terms of Service to use the Swarm.');
-            return;
-        }
-        SwarmWebview.createOrShow(swarmOrchestrator, stateManager, boltOnRegistry, budgetManager);
-    });
-
-    const enableCDPCommand = vscode.commands.registerCommand('auto-continue.enableCDP', async () => {
-        // Prevent action if already active
-        const isActive = await cdpHandler.isCDPAvailable();
-        if (isActive) {
-            vscode.window.showInformationMessage('Swarm CDP is already active (Port Open). No restart needed.');
-            return;
-        }
-
-        // Prevent action if remote host (since spawning code will be headless/remote)
-        if (vscode.env.remoteName) {
-            vscode.window.showWarningMessage('Auto-Continue: You are connected via Remote SSH. Please manually restart your local VS Code window with the "--remote-debugging-port=9000" flag. Auto-relaunch is not supported remotely.');
-            return;
-        }
-
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-            vscode.window.showErrorMessage('No active workspace available to relaunch.');
-            return;
-        }
-
-        const projectPath = workspaceFolders[0].uri.fsPath;
-        vscode.window.showInformationMessage('Auto-Continue: Relaunching VS Code with CDP Debugging enabled...');
-
-        // Wait a tiny bit for the UI to update with the message
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        // Spawn a detached process to re-open the window
-        // Depending on platform, sometimes simply passing `.` works, but being explicit with path is safer
-        const child = cp.spawn('code', [projectPath, '--remote-debugging-port=9000'], {
-            detached: true,
-            stdio: 'ignore'
-        });
-        child.unref();
-
-        // Close the current window so it restarts essentially
-        await vscode.commands.executeCommand('workbench.action.closeWindow');
-    });
+    const toggleCommand = registerToggleCommand(context, stateManager, statusBar, pollingEngine, watchdog);
+    const settingsCommand = registerSettingsCommand();
+    const dashboardCommand = registerDashboardCommand(stateManager, contextTracker);
+    const forceSyncCommand = registerForceSyncCommand(context, syncEngine);
+    const spawnSwarmCommand = registerSpawnSwarmCommand(context, swarmOrchestrator, stateManager, boltOnRegistry, budgetManager);
+    const enableCDPCommand = registerEnableCDPCommand(context, cdpHandler);
+    const createShortcutCommand = registerCreateShortcutCommand();
 
     context.subscriptions.push(
         toggleCommand,
@@ -333,6 +243,7 @@ export function activate(context: vscode.ExtensionContext) {
         forceSyncCommand,
         spawnSwarmCommand,
         enableCDPCommand,
+        createShortcutCommand,
         statusBar,
         contextTracker,
         { dispose: () => lockManager.dispose() }

@@ -43,11 +43,14 @@ export class CDPHandler {
      * Checks if CDP is reachable
      */
     public async isCDPAvailable(): Promise<boolean> {
+        const hosts = ['127.0.0.1', 'localhost', '::1'];
         for (let port = BASE_PORT - PORT_RANGE; port <= BASE_PORT + PORT_RANGE; port++) {
-            try {
-                const pages = await this._getPages(port);
-                if (pages.length > 0) return true;
-            } catch (e) { }
+            for (const host of hosts) {
+                try {
+                    const pages = await this._getPages(port, host);
+                    if (pages.length > 0) return true;
+                } catch (e) { }
+            }
         }
         return false;
     }
@@ -57,19 +60,25 @@ export class CDPHandler {
      */
     public async start(context: vscode.ExtensionContext): Promise<void> {
         this._isEnabled = true;
+        const hosts = ['127.0.0.1', 'localhost', '::1'];
 
         for (let port = BASE_PORT - PORT_RANGE; port <= BASE_PORT + PORT_RANGE; port++) {
-            try {
-                const pages = await this._getPages(port);
-                for (const page of pages) {
-                    const id = `${port}:${page.id}`;
-                    if (!this._connections.has(id)) {
-                        await this._connect(id, page.webSocketDebuggerUrl);
+            for (const host of hosts) {
+                try {
+                    const pages = await this._getPages(port, host);
+                    for (const page of pages) {
+                        const id = `${port}:${page.id}`;
+                        if (!this._connections.has(id)) {
+                            // Convert standard host string for WebSocket URL formatting
+                            const wsUrl = page.webSocketDebuggerUrl;
+                            await this._connect(id, wsUrl);
+                        }
+                        await this._inject(id, context);
                     }
-                    await this._inject(id, context);
+                    if (pages.length > 0) break; // If we found pages on this host, don't keep polling other hosts for this port
+                } catch (e) {
+                    // Ignore port scanning errors
                 }
-            } catch (e) {
-                // Ignore port scanning errors
             }
         }
     }
@@ -100,9 +109,9 @@ export class CDPHandler {
         await Promise.all(promises);
     }
 
-    private async _getPages(port: number): Promise<any[]> {
+    private async _getPages(port: number, host: string = '127.0.0.1'): Promise<any[]> {
         return new Promise((resolve) => {
-            const req = http.get({ hostname: '127.0.0.1', port, path: '/json/list', timeout: 500 }, (res) => {
+            const req = http.get({ hostname: host, port, path: '/json/list', timeout: 500 }, (res) => {
                 let body = '';
                 res.on('data', chunk => body += chunk);
                 res.on('end', () => {

@@ -1,86 +1,53 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { HandoffProtocol } from './HandoffProtocol';
 import { ContractManager, AgentContract } from './ContractManager';
 import { SwarmLockManager } from './SwarmLockManager';
 import { SWARM_CLI_SCRIPT } from './SwarmCLI';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as https from 'https';
 import { BoltOnRegistry } from '../boltons/BoltOnRegistry';
 import { BudgetManager } from './BudgetManager';
 import { ZeroTrustValidator } from '../security/ZeroTrustValidator';
-import { DashboardWebview } from '../ui/DashboardWebview';
+import { SwarmPlanner } from './SwarmPlanner';
+import { HeadlessExecutor } from './HeadlessExecutor';
+import { LocalExecutor } from './LocalExecutor';
+import { UiQueueProcessor } from './UiQueueProcessor';
 
 export class SwarmOrchestrator {
-    private _handoffProtocol: HandoffProtocol;
     private _contractManager: ContractManager;
-    private _lockManager: SwarmLockManager;
-    private _boltOnRegistry: BoltOnRegistry;
     private _budgetManager: BudgetManager;
-    private _zeroTrustValidator?: ZeroTrustValidator;
-
-    private _broadcastStream(threadId: string, role: string, message: string, type: 'info' | 'error' | 'success' = 'info') {
-        const panel = DashboardWebview.currentPanel?.getWebview();
-        if (panel) {
-            panel.postMessage({
-                command: 'streamLog',
-                log: {
-                    timestamp: Date.now(),
-                    threadId,
-                    role,
-                    message,
-                    type
-                }
-            });
-        }
-    }
+    private _planner: SwarmPlanner;
+    private _headlessExecutor: HeadlessExecutor;
+    private _localExecutor: LocalExecutor;
+    private _uiProcessor: UiQueueProcessor;
 
     constructor(
         handoffProtocol: HandoffProtocol,
         contractManager: ContractManager,
-        lockManager: SwarmLockManager,
+        lockManager: SwarmLockManager,  // Kept for signature compatibility for existing instantiation
         boltOnRegistry: BoltOnRegistry,
         budgetManager: BudgetManager,
         zeroTrustValidator?: ZeroTrustValidator
     ) {
-        this._handoffProtocol = handoffProtocol;
         this._contractManager = contractManager;
-        this._lockManager = lockManager;
-        this._boltOnRegistry = boltOnRegistry;
         this._budgetManager = budgetManager;
-        this._zeroTrustValidator = zeroTrustValidator;
+        
+        // Initialize distinct domain executors
+        this._planner = new SwarmPlanner();
+        this._headlessExecutor = new HeadlessExecutor(contractManager, boltOnRegistry, budgetManager, zeroTrustValidator);
+        this._localExecutor = new LocalExecutor(contractManager, budgetManager);
+        this._uiProcessor = new UiQueueProcessor(handoffProtocol, contractManager, budgetManager);
     }
 
     /**
      * Accepts a user's megaprompt and returns the parsed AgentContracts for UI review.
-     * Does NOT spawn them immediately.
      */
     public async decomposeMegaprompt(megaprompt: string): Promise<AgentContract[]> {
-        vscode.window.showInformationMessage('Auto-Continue Swarm: Analyzing Megaprompt (auto-selecting best Gemini 3 model)...');
-        const tasks = await this._decomposePromptWithGemini(megaprompt);
-
-        if (tasks.length === 0) {
-            vscode.window.showWarningMessage('Auto-Continue Swarm: Could not parse delegates. Please check your API key or prompt.');
-            return [];
-        }
-
-        return tasks.map(t => {
-            const timestampIdentifier = new Date().toISOString().replace(/[:.]/g, '-') + `-${Math.floor(Math.random() * 1000)}`;
-            return {
-                threadId: timestampIdentifier,
-                role: t.role,
-                taskDescription: t.description,
-                allowedDirectories: t.allowedDirectories || ['src/'],
-                readOnlyDirectories: t.readOnlyDirectories || [],
-                targetHead: t.targetHead || 'Headless API',
-                budgetLimit: undefined,
-                localContextMax: 8192
-            };
-        });
+        return this._planner.decomposeMegaprompt(megaprompt);
     }
 
     /**
-     * Accepts a list of confirmed AgentContracts and routes them.
+     * Accepts a list of confirmed AgentContracts and routes them to their execution domains.
      */
     public async spawnDelegatesFromContracts(contracts: AgentContract[]): Promise<void> {
         this._provisionSwarmCLI();
@@ -105,12 +72,12 @@ export class SwarmOrchestrator {
             this._contractManager.createContract(contract);
 
             if (contract.targetHead === 'Headless API') {
-                this._executeHeadlessAPI(contract).catch(e => {
+                this._headlessExecutor.execute(contract).catch(e => {
                     console.error(`[Headless API] Error in thread ${contract.threadId}:`, e);
                     vscode.window.showErrorMessage(`[Headless API Error] ${contract.role}: ${e.message}`);
                 });
             } else if (contract.targetHead === 'Local AI') {
-                this._executeLocalAI(contract).catch(e => {
+                this._localExecutor.execute(contract).catch(e => {
                     console.error(`[Local AI] Error in thread ${contract.threadId}:`, e);
                     vscode.window.showErrorMessage(`[Local AI Error] ${contract.role}: ${e.message}`);
                 });
@@ -120,203 +87,14 @@ export class SwarmOrchestrator {
         // 2. Queue Antigravity UI tasks sequentially so the sidebar doesn't bleed
         if (antigravityQueue.length > 0) {
             vscode.window.showInformationMessage(`Auto-Continue Swarm: Queued ${antigravityQueue.length} tasks for Antigravity UI.`);
-            this._processUiQueue(antigravityQueue);
+            this._uiProcessor.processQueue(antigravityQueue);
         }
 
         vscode.window.showInformationMessage('Auto-Continue Swarm: Routing complete.');
     }
 
     /**
-     * Processes the Antigravity UI tasks sequentially by watching the contract file.
-     */
-    private async _processUiQueue(queue: AgentContract[]): Promise<void> {
-        if (queue.length === 0) return;
-
-        const task = queue.shift()!;
-        console.log(`[SwarmOrchestrator] Spawning UI task: ${task.threadId}`);
-
-        this._budgetManager.initializeThread(
-            task.threadId, 
-            task.role, 
-            task.targetHead, 
-            task.budgetLimit || null, 
-            task.localContextMax || 8192
-        );
-
-        // Ensure contract is written before spawn
-        this._contractManager.createContract(task);
-        await this._handoffProtocol.executeSwarmSpawn(task.threadId, task);
-
-        // Path where the contract is stored
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) return;
-        const workspaceRoot = workspaceFolders[0].uri.fsPath;
-        const contractPath = path.join(workspaceRoot, '.antigravity/contracts', `${task.threadId}.json`);
-
-        // Wait for the UI agent to delete its contract file
-        await new Promise<void>((resolve) => {
-            if (!fs.existsSync(contractPath)) {
-                resolve();
-                return;
-            }
-
-            let resolved = false;
-            let pollInterval: NodeJS.Timeout;
-
-            const watcher = fs.watch(path.dirname(contractPath), (eventType, filename) => {
-                if (eventType === 'rename' && filename === `${task.threadId}.json`) {
-                    if (!fs.existsSync(contractPath) && !resolved) {
-                        resolved = true;
-                        watcher.close();
-                        clearInterval(pollInterval);
-                        resolve();
-                    }
-                }
-            });
-
-            // Fallback polling just in case fs.watch misses the event on some platforms
-            pollInterval = setInterval(() => {
-                if (!fs.existsSync(contractPath) && !resolved) {
-                    resolved = true;
-                    clearInterval(pollInterval);
-                    watcher.close();
-                    resolve();
-                }
-            }, 2000);
-        });
-
-        console.log(`[SwarmOrchestrator] UI task ${task.threadId} completed.`);
-        this._budgetManager.resolveThread(task.threadId);
-
-        // Pop the next task in the queue
-        if (queue.length > 0) {
-            await this._processUiQueue(queue);
-        } else {
-            vscode.window.showInformationMessage('Auto-Continue Swarm: All UI queued tasks have been completed.');
-        }
-    }
-
-    /**
-     * Intelligent parser using Gemini REST API to break down a Megaprompt into structured JSON.
-     */
-    private async _decomposePromptWithGemini(prompt: string): Promise<Array<{ role: string, description: string, allowedDirectories: string[], readOnlyDirectories: string[], targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI' }>> {
-        const config = vscode.workspace.getConfiguration('autoContinue');
-        const apiKey = config.get<string>('geminiApiKey');
-
-        if (!apiKey) {
-            vscode.window.showErrorMessage('Auto-Continue Swarm: Gemini API Key is missing. Please add it in settings (autoContinue.geminiApiKey).');
-            return [];
-        }
-
-        const systemInstruction = `You are the Swarm Orchestrator Manager. Your job is to take a user's large feature request (Megaprompt) and break it down into distinct, specialized, non-overlapping tasks for Worker Agents.
-You MUST output ONLY valid JSON format. No markdown blocks, no conversational text. Just the raw JSON array.
-
-The JSON schema MUST be an array of objects matching this exact structure:
-[
-  {
-    "role": "string (e.g., 'Frontend Worker', 'Database Engineer')",
-    "description": "string (Detailed, exhaustive instructions of what exactly this agent should do. MUST include ALL context from the prompt.)",
-    "allowedDirectories": ["string (e.g., 'src/ui', 'styles/')"],
-    "readOnlyDirectories": ["string (e.g., 'src/api/types.ts')"],
-    "targetHead": "string (MUST BE EXACTLY ONE OF: 'Antigravity UI' OR 'Headless API' OR 'Local AI')"
-  }
-]
-- Use 'Antigravity UI' if the task requires deep codebase understanding or complex planning.
-- Use 'Headless API' for parallel code generation or independent testing.
-- Use 'Local AI' for fast, simple tasks like syntax checks, formatting, or simple refactors.`;
-
-        const payload = JSON.stringify({
-            system_instruction: {
-                parts: [{ text: systemInstruction }]
-            },
-            contents: [{
-                parts: [{ text: `Analyze the following Megaprompt and decompose it:\n\n${prompt}` }]
-            }],
-            generationConfig: {
-                response_mime_type: "application/json"
-            }
-        });
-
-        const modelsToTry = [
-            'gemini-3.1-pro-preview',
-            'gemini-3.1-pro-preview-customtools',
-            'gemini-3.1-flash-lite-preview',
-            'gemini-3.1-flash-image-preview',
-            'gemini-3-pro-preview',
-            'gemini-3-pro-image-preview',
-            'gemini-3-flash-preview',
-            'gemini-2.5-flash',
-            'gemini-2.5-pro',
-            'gemini-2.0-pro-exp-02-05',
-            'gemini-2.0-flash-thinking-exp-01-21',
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-lite-preview-02-05',
-            'gemini-1.5-pro',
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-8b'
-        ];
-
-        try {
-            for (const model of modelsToTry) {
-                try {
-                    const data = await new Promise<any>((resolve, reject) => {
-                        const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Content-Length': Buffer.byteLength(payload)
-                            }
-                        }, (res) => {
-                            let responseBody = '';
-                            res.on('data', chunk => responseBody += chunk);
-                            res.on('end', () => {
-                                if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-                                    reject(new Error(`API returned ${res.statusCode}: ${responseBody}`));
-                                    return;
-                                }
-                                try {
-                                    resolve(JSON.parse(responseBody));
-                                } catch (e) {
-                                    reject(new Error("Failed to parse Gemini API response JSON."));
-                                }
-                            });
-                        });
-
-                        req.on('error', reject);
-                        req.write(payload);
-                        req.end();
-                    });
-
-                    if (!data.candidates || data.candidates.length === 0) {
-                        throw new Error(`No candidates returned from Gemini API for ${model}.`);
-                    }
-
-                    let responseText = data.candidates[0].content.parts[0].text;
-                    responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-
-                    const parsedTasks = JSON.parse(responseText);
-
-                    if (!Array.isArray(parsedTasks)) {
-                        throw new Error(`LLM (${model}) did not return a JSON array.`);
-                    }
-
-                    console.log(`[Auto-Continue Swarm] Successfully used ${model} for decomposition.`);
-                    return parsedTasks;
-
-                } catch (e: any) {
-                    console.warn(`[Auto-Continue Swarm] Model ${model} failed: ${e.message}. Trying next...`);
-                }
-            }
-        } catch (outerError: any) {
-             console.error(`[Auto-Continue Swarm] Catastrophic failure in fallback loop: ${outerError.message}`);
-        }
-
-        vscode.window.showErrorMessage(`Swarm Megaprompt Decomposition Failed: All fallback models exhausted. Please check your API key permissions.`);
-        return [];
-    }
-
-    /**
-     * Deploys the node-based CLI script that agents can use to acquire Mutex locks
+     * Deploys the node-based CLI script that agents can use to acquire Mutex locks.
      */
     private _provisionSwarmCLI(): void {
         const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -330,294 +108,5 @@ The JSON schema MUST be an array of objects matching this exact structure:
         const scriptPath = path.join(binDir, 'swarm.js');
         // Always overwrite to ensure it has the latest CLI code
         fs.writeFileSync(scriptPath, SWARM_CLI_SCRIPT, { encoding: 'utf8', mode: 0o755 });
-    }
-
-    /**
-     * Executes a task headlessly via the Gemini API.
-     */
-    private async _executeHeadlessAPI(contract: AgentContract): Promise<void> {
-        console.log(`[Headless API] Starting Swarm Worker: ${contract.role} (${contract.threadId})`);
-        this._broadcastStream(contract.threadId, contract.role, 'Started Headless AI Agent.');
-
-        const config = vscode.workspace.getConfiguration('autoContinue');
-        const apiKey = config.get<string>('geminiApiKey');
-
-        if (!apiKey) {
-            console.error('[Headless API] Gemini API Key is missing.');
-            vscode.window.showErrorMessage('[Headless API] Failed to start Swarm Worker: Gemini API Key is missing.');
-            this._broadcastStream(contract.threadId, contract.role, 'Failed: Missing API Key', 'error');
-            return;
-        }
-
-        const enforcementPrompt = this._contractManager.generateEnforcementPrompt(contract);
-        const systemInstruction = `${enforcementPrompt}\n\nYour objective is: ${contract.taskDescription}. Use the provided tools to accomplish this. When finished, you must output exactly [TASK_COMPLETE].`;
-
-        // Map BoltOns to Gemini Tools
-        const allBoltOns = this._boltOnRegistry.getAll();
-        const geminiTools = [{
-            functionDeclarations: allBoltOns.map(boltOn => {
-                let schema;
-                if (boltOn.id === 'file_reader_writer') {
-                    schema = {
-                        type: "OBJECT",
-                        properties: {
-                            intent: { type: "STRING", enum: ["read_file", "write_file"] },
-                            filepath: { type: "STRING", description: "The path of the file relative to the workspace root." },
-                            content: { type: "STRING", description: "The content to write. Required only if intent is write_file." }
-                        },
-                        required: ["intent", "filepath"]
-                    };
-                } else {
-                    schema = { type: "OBJECT" };
-                }
-
-                return {
-                    name: boltOn.id,
-                    description: boltOn.description,
-                    parameters: schema
-                };
-            })
-        }];
-
-        const modelsToTry = [
-            'gemini-3.1-pro-preview',
-            'gemini-3.1-pro-preview-customtools',
-            'gemini-3.1-flash-lite-preview',
-            'gemini-3.1-flash-image-preview',
-            'gemini-3-pro-preview',
-            'gemini-3-pro-image-preview',
-            'gemini-3-flash-preview',
-            'gemini-2.5-flash',
-            'gemini-2.5-pro',
-            'gemini-2.0-pro-exp-02-05',
-            'gemini-2.0-flash-thinking-exp-01-21',
-            'gemini-2.0-flash',
-            'gemini-2.0-flash-lite-preview-02-05',
-            'gemini-1.5-pro',
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-8b'
-        ];
-
-        let history: any[] = [{ role: "user", parts: [{ text: "Begin execution." }] }];
-        let maxIterations = 15;
-        let iteration = 0;
-
-        while (iteration < maxIterations) {
-            iteration++;
-
-            if (this._budgetManager.checkCloudOverage(contract.threadId)) {
-                vscode.window.showErrorMessage(`[Headless API] Swarm Worker ${contract.role} exceeded cloud API budget limit of ${contract.budgetLimit} tokens! Halting.`);
-                break;
-            }
-
-            const payload = JSON.stringify({
-                system_instruction: { parts: [{ text: systemInstruction }] },
-                contents: history.length > 0 ? history : [{ role: "user", parts: [{ text: "Begin execution." }] }],
-                tools: geminiTools
-            });
-
-            let modelResponse: any = null;
-            let success = false;
-
-            for (const model of modelsToTry) {
-                try {
-                    const data = await new Promise<any>((resolve, reject) => {
-                        const req = https.request(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Content-Length': Buffer.byteLength(payload)
-                            }
-                        }, (res) => {
-                            let responseBody = '';
-                            res.on('data', chunk => responseBody += chunk);
-                            res.on('end', () => {
-                                if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-                                    reject(new Error(`API returned ${res.statusCode}: ${responseBody}`));
-                                    return;
-                                }
-                                try {
-                                    resolve(JSON.parse(responseBody));
-                                } catch (e) {
-                                    reject(new Error("Failed to parse Gemini API response JSON."));
-                                }
-                            });
-                        });
-                        req.on('error', reject);
-                        req.write(payload);
-                        req.end();
-                    });
-
-                    if (data.candidates && data.candidates.length > 0) {
-                        modelResponse = data.candidates[0].content;
-                        success = true;
-
-                        // Telemetry Recording
-                        if (data.usageMetadata && data.usageMetadata.promptTokenCount !== undefined) {
-                            this._budgetManager.recordCloudUsage(
-                                contract.threadId, 
-                                data.usageMetadata.promptTokenCount, 
-                                data.usageMetadata.candidatesTokenCount || 0
-                            );
-                        }
-
-                        break;
-                    }
-                } catch (e: any) {
-                    console.warn(`[Headless API] Model ${model} failed: ${e.message}. Trying next...`);
-                }
-            }
-
-            if (!success || !modelResponse) {
-                console.error(`[Headless API] Swarm Thread ${contract.threadId} failed: All fallback models exhausted.`);
-                vscode.window.showErrorMessage(`[Headless API] Swarm Worker ${contract.role} failed: All API fallback models exhausted.`);
-                break;
-            }
-
-            history.push(modelResponse);
-
-            let hasFunctionCall = false;
-            let taskComplete = false;
-
-            for (const part of modelResponse.parts) {
-                if (part.text && part.text.includes('[TASK_COMPLETE]')) {
-                    taskComplete = true;
-                }
-                if (part.functionCall) {
-                    hasFunctionCall = true;
-                    const call = part.functionCall;
-                    console.log(`[Headless API] Agent ${contract.role} executing tool: ${call.name}`);
-                    this._broadcastStream(contract.threadId, contract.role, `Executing tool: ${call.name}`);
-
-                    try {
-                        const boltOn = this._boltOnRegistry.get(call.name);
-
-                        let relevantFiles: string[] = [];
-                        let intent = '';
-                        let contextObj: any = {};
-
-                        if (call.name === 'file_reader_writer') {
-                            intent = call.args.intent;
-                            relevantFiles = [call.args.filepath];
-                            if (intent === 'write_file') {
-                                contextObj['content'] = call.args.content;
-                            }
-                        }
-
-                        const state = {
-                            taskId: contract.threadId,
-                            intent: intent,
-                            relevantFiles: relevantFiles,
-                            context: contextObj
-                        };
-
-                        if (this._zeroTrustValidator) {
-                            this._zeroTrustValidator.validateExecutionStart(boltOn, state);
-                        }
-
-                        const result = await boltOn.execute(state);
-
-                        if (this._zeroTrustValidator) {
-                            this._zeroTrustValidator.validateExecutionEnd(boltOn, result);
-                        }
-
-                        this._broadcastStream(contract.threadId, contract.role, `Tool returned: ${result.success ? 'Success' : 'Failed'}`);
-
-                        // Push function response to history
-                        history.push({
-                            role: "function",
-                            parts: [{
-                                functionResponse: {
-                                    name: call.name,
-                                    response: { name: call.name, content: result }
-                                }
-                            }]
-                        });
-                    } catch (e: any) {
-                        console.error(`[Headless API] Tool execution failed: ${e.message}`);
-                        vscode.window.showErrorMessage(`[Headless API] Tool execution failed for ${contract.role}: ${e.message}`);
-                        this._broadcastStream(contract.threadId, contract.role, `Tool Error: ${e.message}`, 'error');
-                        history.push({
-                            role: "function",
-                            parts: [{
-                                functionResponse: {
-                                    name: call.name,
-                                    response: { name: call.name, error: e.message }
-                                }
-                            }]
-                        });
-                    }
-                }
-            }
-
-            if (taskComplete || !hasFunctionCall) {
-                console.log(`[Headless API] Agent ${contract.role} finished its task.`);
-                break;
-            }
-        }
-
-        console.log(`[Headless API] Completed Swarm Worker: ${contract.role} (${contract.threadId})`);
-
-        // Clean up contract
-        this._contractManager.resolveContract(contract.threadId);
-        this._budgetManager.resolveThread(contract.threadId);
-        vscode.window.showInformationMessage(`Swarm Agent [${contract.role}] completed its headless task.`);
-    }
-
-    /**
-     * Executes a task headlessly via a local inference endpoint (e.g. LM Studio).
-     */
-    private async _executeLocalAI(contract: AgentContract): Promise<void> {
-        console.log(`[Local AI] Starting Swarm Worker: ${contract.role} (${contract.threadId})`);
-
-        let history: any[] = [{ role: "user", parts: [{ text: "Begin execution." }] }];
-        let maxIterations = 8;
-        let iteration = 0;
-
-        // MVP Placeholder: Simulate work loop with auto-summary
-        while (iteration < maxIterations) {
-            iteration++;
-
-            // Mock Tracking - Every iter adds 1500 tokens of "context"
-            const simulatedTokens = 1500;
-            this._budgetManager.recordLocalContextAddition(contract.threadId, simulatedTokens);
-
-            if (this._budgetManager.isLocalContextCritical(contract.threadId)) {
-                console.log(`[Local AI] Context Window critical for ${contract.role}. Triggering Auto-Summary.`);
-                vscode.window.showInformationMessage(`[Local AI] Context Window critical for ${contract.role}. Auto-Summarizing to prevent hallucinations...`);
-                
-                await this._autoSummarizeAndReset(history, contract);
-                continue;
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            // Let's pretend it finishes on iter 3
-            if (iteration >= 3) {
-                break;
-            }
-        }
-
-        console.log(`[Local AI] Completed Swarm Worker: ${contract.role} (${contract.threadId})`);
-
-        // Clean up contract
-        this._contractManager.resolveContract(contract.threadId);
-        this._budgetManager.resolveThread(contract.threadId);
-        vscode.window.showInformationMessage(`Swarm Agent [${contract.role}] completed its local task.`);
-    }
-
-    /**
-     * Resets the local agent's history via an auto-summary to alleviate context window pressure.
-     */
-    private async _autoSummarizeAndReset(history: any[], contract: AgentContract): Promise<void> {
-        // Here we would typically hit a lightweight local LLM or fast Gemini model to summarize the history
-        // e.g. "Summarize your exact progress and findings so far..."
-        console.log(`[Local AI] Performing Auto-Summary for thread ${contract.threadId}`);
-
-        // Stubbed auto-summary logic
-        history.length = 0;
-        history.push({ role: "user", parts: [{ text: "Resuming task with summarized context: You have checked the schema and partially implemented the endpoint. Continue." }] });
-        
-        // Reset the budget manager's context fill level to just the summary size (~500 tokens)
-        this._budgetManager.resetLocalContext(contract.threadId, 500);
     }
 }

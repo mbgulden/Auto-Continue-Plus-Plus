@@ -2,7 +2,7 @@
     "name": "auto-continue-plus-plus",
     "displayName": "Auto-Continue Plus Plus",
     "description": "Advanced Auto-Accept Agent with Multi-Tab and Recovery features.",
-    "version": "1.1.17",
+    "version": "1.1.43",
     "publisher": "mbgulden",
     "repository": {
         "type": "git",
@@ -48,6 +48,10 @@
             {
                 "command": "auto-continue.enableCDP",
                 "title": "Auto-Continue: Enable Swarm CDP (Relaunch Workspace)"
+            },
+            {
+                "command": "auto-continue.swarm.createShortcut",
+                "title": "Auto-Continue Swarm: Create Desktop Shortcut (CDP Enabled)"
             }
         ],
         "configuration": {

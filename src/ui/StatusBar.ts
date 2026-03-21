@@ -5,9 +5,10 @@ import { ContextTracker } from '../engine/ContextTracker';
 export class StatusBar implements vscode.Disposable {
     private _statusBarItem: vscode.StatusBarItem;
     private _dashboardItem: vscode.StatusBarItem;
+    private _swarmItem: vscode.StatusBarItem;
+    private _megapromptItem: vscode.StatusBarItem;
     private _settingsItem: vscode.StatusBarItem;
     private _cdpItem: vscode.StatusBarItem;
-    private _swarmItem: vscode.StatusBarItem;
     private _stateManager: StateManager;
     private _contextTracker?: ContextTracker;
     private _contextHealthDisposable?: vscode.Disposable;
@@ -16,35 +17,47 @@ export class StatusBar implements vscode.Disposable {
     constructor(context: vscode.ExtensionContext, stateManager: StateManager) {
         this._stateManager = stateManager;
 
-        // Create main toggle item
+        // Auto-Continue toggle switch
         this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this._statusBarItem.command = 'auto-continue.toggle';
 
-        // Create Dashboard quick-access item
+        // Lineage
         this._dashboardItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
         this._dashboardItem.command = 'auto-continue.dashboard';
         this._dashboardItem.text = `$(graph) Lineage`;
         this._dashboardItem.tooltip = 'Open Auto-Continue Context Lineage Dashboard';
 
-        // Create Settings quick-access item
-        this._settingsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 98);
+        // Agents Pro (Swarm Manager)
+        this._swarmItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 98);
+        this._swarmItem.command = 'auto-continue.swarm.spawnDelegates';
+        this._swarmItem.text = `$(organization) Agents Pro`;
+        this._swarmItem.tooltip = 'Open Agents Pro (Swarm Manager)';
+
+        // Megaprompt
+        this._megapromptItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
+        this._megapromptItem.command = 'auto-continue.megaprompt';
+        this._megapromptItem.text = `$(sparkle) Megaprompt`;
+        this._megapromptItem.tooltip = 'Launch Megaprompt Builder';
+
+        // Settings
+        this._settingsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 96);
         this._settingsItem.command = 'auto-continue.settings';
-        this._settingsItem.text = `$(gear)`;
+        this._settingsItem.text = `$(gear) Antigravity - Settings`;
         this._settingsItem.tooltip = 'Open Auto-Continue Settings';
 
-        // Create CDP quick-access item
+        // CDP toggle
         this._cdpItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
         this._cdpItem.command = 'auto-continue.enableCDP';
 
-        // Create Swarm Manager quick-access item
-        this._swarmItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
-        this._swarmItem.command = 'auto-continue.swarm.spawnDelegates';
-        this._swarmItem.text = `$(hub)`;
-        this._swarmItem.tooltip = 'Open Swarm Manager Dashboard';
+        context.subscriptions.push(
+            this._statusBarItem, 
+            this._dashboardItem, 
+            this._swarmItem, 
+            this._megapromptItem,
+            this._settingsItem, 
+            this._cdpItem
+        );
 
-        context.subscriptions.push(this._statusBarItem, this._dashboardItem, this._settingsItem, this._cdpItem, this._swarmItem);
-
-        // Initial update
         this.update();
     }
 
@@ -74,13 +87,15 @@ export class StatusBar implements vscode.Disposable {
      * Updates the UI text and icon based on the current state and context health
      */
     public update() {
+        const appName = vscode.env.appName || 'the editor';
+        
         if (this._isCdpActive) {
             this._cdpItem.text = `$(check) Swarm CDP`;
             this._cdpItem.tooltip = 'Chrome DevTools Protocol Active (Port Open)';
             this._cdpItem.backgroundColor = undefined;
         } else {
             this._cdpItem.text = `$(warning) Enable Swarm CDP`;
-            this._cdpItem.tooltip = 'Click to relaunch VS Code with the CDP debugging port 9000 enabled.';
+            this._cdpItem.tooltip = `Click to relaunch ${appName} with the CDP debugging port 9000 enabled.`;
             this._cdpItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         }
 
@@ -117,9 +132,10 @@ export class StatusBar implements vscode.Disposable {
 
         this._statusBarItem.show();
         this._dashboardItem.show();
+        this._swarmItem.show();
+        this._megapromptItem.show();
         this._settingsItem.show();
         this._cdpItem.show();
-        this._swarmItem.show();
     }
 
     public dispose() {
@@ -128,8 +144,9 @@ export class StatusBar implements vscode.Disposable {
         }
         this._statusBarItem.dispose();
         this._dashboardItem.dispose();
+        this._swarmItem.dispose();
+        this._megapromptItem.dispose();
         this._settingsItem.dispose();
         this._cdpItem.dispose();
-        this._swarmItem.dispose();
     }
 }

@@ -2,7 +2,7 @@
     "name": "antigravity-orchestration-hub",
     "displayName": "Antigravity Orchestration Hub",
     "description": "The central Hub plugin for the Multi-Agent Antigravity ecosystem.",
-    "version": "1.1.43",
+    "version": "1.1.44",
     "publisher": "mbgulden",
     "icon": "assets/icon.png",
     "repository": {

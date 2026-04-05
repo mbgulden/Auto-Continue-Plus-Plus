@@ -6,6 +6,7 @@ src/**
 **/*.ts
 **/*.map
 .agents/**
+
 .instructions/**
 ovsx_publish_output.txt
 ovsx_publish_utf8.txt
@@ -18,3 +19,4 @@ esbuild.config.mjs
 .github/**
 docs/**
 tests/**
+commander-dashboard/node_modules/**

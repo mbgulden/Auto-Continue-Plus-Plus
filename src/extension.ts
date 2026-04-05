@@ -301,16 +301,17 @@ export function activate(context: vscode.ExtensionContext) {
                     "Yes, Install", "Later"
                 ).then(selection => {
                     if (selection === "Yes, Install") {
-                        const scriptPath = path.join(context.extensionPath, '.agents', 'skills', 'swarm_orchestrator', 'Install-DashboardStartup.ps1');
-                        cp.exec(`powershell.exe -ExecutionPolicy Bypass -File "${scriptPath}"`, (err, stdout, stderr) => {
-                            if (err) {
-                                vscode.window.showErrorMessage(`Failed to install Auto-Startup: ${err.message}`);
-                            } else {
-                                if (fs.existsSync(vbsPath)) {
-                                    vscode.window.showInformationMessage("Success! The Antigravity Supervisor Daemon auto-startup was installed correctly.");
-                                }
-                            }
-                        });
+                        const workspaceDir = "C:\\Users\\mbgul\\Dropbox\\Workshop\\Antigravity Orchestration Hub";
+                        const vbsContent = `Set objShell = CreateObject("WScript.Shell")
+objShell.Run "cmd /c cd /d ""${workspaceDir}\\.agents\\skills\\swarm_orchestrator"" && python supervisor_daemon.py", 0, False
+objShell.Run "cmd /c cd /d ""${workspaceDir}\\commander-dashboard"" && npm run dev", 0, False`;
+
+                        try {
+                            fs.writeFileSync(vbsPath, vbsContent, 'utf8');
+                            vscode.window.showInformationMessage("Success! The Antigravity Supervisor Daemon auto-startup was installed correctly.");
+                        } catch (err: any) {
+                            vscode.window.showErrorMessage(`Failed to install Auto-Startup: ${err.message}`);
+                        }
                     }
                 });
             }

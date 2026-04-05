@@ -109,7 +109,7 @@ export function triggerRunShortcut(allActionButtons: HTMLElement[]): boolean {
         const promptScopes = queryAll(
             '[role="dialog"], .notification-toast, .notification-list-item, ' +
             '.monaco-dialog-box, .monaco-dialog-modal-block, .interactive-session, ' +
-            '.chat-tool-call, .chat-tool-response, [class*="tool-call"], [data-testid*="tool-call"]'
+            '.chat-tool-call, .chat-tool-response, [class*="tool-call"], [data-testid*="tool-call"], .antigravity-agent-side-panel'
         );
         const prompt = promptScopes.find(node => {
             const t = getActionText(node);

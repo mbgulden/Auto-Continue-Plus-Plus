@@ -342,7 +342,7 @@ objShell.Run "cmd /c cd /d ""${workspaceDir}\\commander-dashboard"" && npm run d
             }
 
             // Automatic 5-minute CDP Activity Check
-            setTimeout(async () => {
+            setInterval(async () => {
                 const isActive = await cdpHandler.isCDPAvailable();
                 if (isActive) {
                     vscode.window.showInformationMessage("Antigravity Diagnostic: CDP-based DOM Scraping is Active and Connected.");

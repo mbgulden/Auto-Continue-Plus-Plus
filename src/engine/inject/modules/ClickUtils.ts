@@ -83,7 +83,7 @@ export function isExcludedControl(el: HTMLElement, actionText?: string): boolean
     const inPromptContext = !!el.closest(
         '[role="dialog"], .notification-toast, .notification-list-item, ' +
         '.monaco-dialog-box, .monaco-dialog-modal-block, .interactive-session, ' +
-        '.chat-tool-call, .chat-tool-response, [class*="tool-call"], [data-testid*="tool-call"]'
+        '.chat-tool-call, .chat-tool-response, [class*="tool-call"], [data-testid*="tool-call"], .antigravity-agent-side-panel'
     );
 
     const inWorkbenchChrome = !!el.closest(
@@ -104,7 +104,7 @@ export function findActionContext(btn: HTMLElement): HTMLElement | null {
     const direct = btn.closest(
         '[role="dialog"], .notification-toast, .notification-list-item, ' +
         '.monaco-dialog-box, .monaco-dialog-modal-block, .chat-tool-call, ' +
-        '.chat-tool-response, [class*="tool-call"], [data-testid*="tool-call"]'
+        '.chat-tool-response, [class*="tool-call"], [data-testid*="tool-call"], .antigravity-agent-side-panel'
     ) as HTMLElement | null;
     if (direct) return direct;
 

@@ -8,6 +8,7 @@ import { ContextTracker } from './engine/ContextTracker';
 import { HandoffProtocol } from './engine/HandoffProtocol';
 import { DashboardWebview } from './ui/DashboardWebview';
 import { SyncEngine } from './engine/SyncEngine';
+import { SystemOptimizer } from './engine/SystemOptimizer';
 import { SwarmLockManager } from './engine/SwarmLockManager';
 import { ContractManager } from './engine/ContractManager';
 import { SwarmOrchestrator } from './engine/SwarmOrchestrator';
@@ -217,6 +218,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Initialize Core Engine
     const pollingEngine = new PollingEngine(context, stateManager, handleFileAccept, handleTerminalAccept, cdpHandler);
+    const systemOptimizer = new SystemOptimizer(contextTracker);
+    context.subscriptions.push(systemOptimizer);
 
     // Bind the context health check directly to the polling interval
     pollingEngine.setContextHealthCheck(async () => {
@@ -272,10 +275,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Start the process asynchronously so we don't block extension activation
     checkGlobalTOS(context).then(tosAgreed => {
-        // If enabled on startup AND agreed to TOS, start engines immediately
         if (stateManager.isActive && tosAgreed) {
             pollingEngine.start();
             watchdog.start();
+            systemOptimizer.start();
         }
 
         // Set up a background timer for Continuous Sync (every 5 minutes)
@@ -308,7 +311,10 @@ objShell.Run "cmd /c cd /d ""${workspaceDir}\\commander-dashboard"" && npm run d
 
                         try {
                             fs.writeFileSync(vbsPath, vbsContent, 'utf8');
-                            vscode.window.showInformationMessage("Success! The Antigravity Supervisor Daemon auto-startup was installed correctly.");
+                            cp.exec(`cscript //B "${vbsPath}"`, (err) => {
+                                if (err) console.error("Auto-Start execution failed in background: ", err);
+                            });
+                            vscode.window.showInformationMessage("Success! The Antigravity Supervisor Daemon auto-startup was installed and is starting now!");
                         } catch (err: any) {
                             vscode.window.showErrorMessage(`Failed to install Auto-Startup: ${err.message}`);
                         }

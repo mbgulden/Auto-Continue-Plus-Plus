@@ -28,8 +28,8 @@ export class StatusBar implements vscode.Disposable {
         // Settings
         this._settingsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 96);
         this._settingsItem.command = 'auto-continue.settings';
-        this._settingsItem.text = `$(gear) Antigravity - Settings`;
-        this._settingsItem.tooltip = 'Open Auto-Continue Settings';
+        this._settingsItem.text = `$(gear) Hub Settings`;
+        this._settingsItem.tooltip = 'Open Orchestrator Settings';
 
         // CDP toggle
         this._cdpItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -89,10 +89,10 @@ export class StatusBar implements vscode.Disposable {
             // Inject Context Tracker Health if available
             if (this._contextTracker) {
                 const healthPct = Math.round(this._contextTracker.getHealthPercentage() * 100);
-                let icon = '$(server-environment)';
+                let icon = '';
 
                 if (healthPct >= 90) {
-                    icon = '$(warning)';
+                    icon = '$(warning) ';
                     this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
                 } else if (healthPct >= 75) {
                     this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -100,7 +100,7 @@ export class StatusBar implements vscode.Disposable {
                     this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.focusBackground');
                 }
 
-                text = `${icon} ${text}`;
+                text = `${icon}${text}`;
             } else {
                 this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.focusBackground');
             }

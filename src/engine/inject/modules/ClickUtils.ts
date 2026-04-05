@@ -6,6 +6,12 @@
 import { log, queryAll, getDocuments } from './DomUtils';
 import './State';
 
+declare global {
+    interface Window {
+        __cdpTelemetry?: (msg: string) => void;
+    }
+}
+
 /** Selector for interactive action nodes in Antigravity's DOM */
 export const ACTION_NODE_SELECTOR = 'button, [role="button"], a[role="button"]';
 

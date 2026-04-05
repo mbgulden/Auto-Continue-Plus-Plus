@@ -112,6 +112,18 @@ export function clickAcceptButtons(): number {
         }
     }
 
+    // ─── PHASE 1.4: Aggressive Brute-Force "Run" Match ──────────
+    for (const btn of allActionButtons) {
+        const text = getActionText(btn);
+        if (/^\s*run\s*$/i.test(text) || text === 'run' || text.includes('runalt+') || text.includes('run alt+')) {
+            const container = findActionContext(btn) || btn.parentElement;
+            if (container && !isExcludedControl(btn, text)) {
+                log(`Aggressive Run fallback triggered: "${text}"`);
+                if (clickElement(btn, 'aggressive-run')) return 1;
+            }
+        }
+    }
+
     // ─── PHASE 1.5: Run command prompts (scored) ────────────────
     clickedCount = handleRunPrompts(allActionButtons);
     if (clickedCount > 0) return clickedCount;

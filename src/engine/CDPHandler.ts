@@ -4,6 +4,12 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 
+export interface CDPTrafficEvent {
+    type: 'click' | 'block' | 'reload' | 'heartbeat_fail';
+    message: string;
+}
+
+
 const BASE_PORT = 9000;
 const PORT_RANGE = 3; // 9000 +/- 3
 
@@ -137,14 +143,34 @@ export class CDPHandler {
     private async _connect(id: string, url: string): Promise<boolean> {
         return new Promise((resolve) => {
             const ws = new WebSocket(url);
+            
+            // Heartbeat
+            let isAlive = true;
+            const heartbeatInterval = setInterval(() => {
+                if (ws.readyState !== WebSocket.OPEN) return;
+                if (!isAlive) {
+                    ws.terminate();
+                    return;
+                }
+                isAlive = false;
+                ws.ping();
+            }, 5000);
+
+            ws.on('pong', () => { isAlive = true; });
+
             ws.on('open', () => {
                 this._connections.set(id, { ws, injected: false });
                 console.log(`[Auto-Continue CDP] Connected to page ${id}`);
                 resolve(true);
             });
-            ws.on('error', () => resolve(false));
+            ws.on('error', () => {
+                clearInterval(heartbeatInterval);
+                resolve(false);
+            });
             ws.on('close', () => {
+                clearInterval(heartbeatInterval);
                 this._connections.delete(id);
+                console.log(`[Auto-Continue CDP] Connection closed for ${id}`);
             });
         });
     }
@@ -156,6 +182,9 @@ export class CDPHandler {
         try {
             if (!conn.injected) {
                 const script = this._getAutoAcceptScript(context);
+                
+                // We no longer inject fetch directly in the payload;
+                // telemetry is handled securely by the PollingEngine via Node.js
                 await this._evaluate(id, script);
                 conn.injected = true;
 

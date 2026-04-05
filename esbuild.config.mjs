@@ -79,6 +79,7 @@ async function main() {
         await webviewCtx.dispose();
         await injectCtx.rebuild();
         await injectCtx.dispose();
+        process.exit(0);
     }
 }
 

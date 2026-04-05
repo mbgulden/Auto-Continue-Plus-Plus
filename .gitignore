@@ -9,3 +9,8 @@ out/
 *.lock
 .vscode/
 .agents/knowledge/keys.md
+
+# AI Working Environment Bloat
+.agents/artifacts/
+.agent/
+Example Repositories/

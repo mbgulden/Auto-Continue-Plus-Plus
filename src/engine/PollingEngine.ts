@@ -10,6 +10,7 @@ export class PollingEngine {
 
     // Default interval in ms
     private _currentInterval: number = 2000;
+    private _lastTelemetryPing: number = 0;
 
     // Handlers for specific auto-accept tasks
     private _fileAcceptHandler: () => Promise<void>;
@@ -47,11 +48,32 @@ export class PollingEngine {
     }
 
     /**
-     * Updates polling speed from settings
+     * Updates polling speed from settings and API limits
      */
-    private updateIntervalSpeed() {
+    private async updateIntervalSpeed() {
         const config = vscode.workspace.getConfiguration('autoContinue');
-        this._currentInterval = config.get<number>('pollingSpeed', 2000);
+        let baseInterval = config.get<number>('pollingSpeed', 2000);
+
+        try {
+            // Dynamic Throttle Polling connected to /api/usage
+            const response = await fetch('http://localhost:5001/api/usage');
+            if (response.ok) {
+                const data = await response.json();
+                const activeModel = data.active_model;
+                const activeUsage = data.models?.[activeModel];
+                if (activeUsage) {
+                    if (activeUsage.status === 'warning') {
+                        baseInterval *= 2; // slow down polling 2x
+                    } else if (activeUsage.status === 'critical') {
+                        baseInterval *= 5; // slow down polling 5x
+                    }
+                }
+            }
+        } catch (e) {
+            // Supervisor daemon likely down, keep base interval
+        }
+
+        this._currentInterval = baseInterval;
 
         // If currently running, restart with new speed
         if (this._intervalId) {
@@ -111,10 +133,30 @@ export class PollingEngine {
                 await this._contextHealthCheck();
             }
 
-            // 1. Check for pending file diffs / apply
-            await this._fileAcceptHandler();
+            // Periodically check throttle status
+            if (Math.random() < 0.1) {
+                await this.updateIntervalSpeed();
+            }
 
-            // 2. Check for pending terminal executions
+            // Secure Node.js Telemetry Ping (every ~30s instead of injecting fetch in webview)
+            const now = Date.now();
+            if (now - this._lastTelemetryPing > 30000) {
+                this._lastTelemetryPing = now;
+                try {
+                    fetch('http://localhost:5001/api/telemetry', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ msg: 'CDP Polling Engine Active', level: 'info' })
+                    }).catch(() => { /* silent fail if supervisor down */ });
+                } catch (e) { }
+            }
+
+            // 1. & 2. Try CDP execution first (DOM Scraping payload handles all types of accept logic)
+            // It runs synchronously inside the webview without focus requirements.
+            await this._cdpHandler.executeGlobalScript('if(window.__autoAcceptState) clickAcceptButtons();');
+
+            // Fallback hierarchy: if CDP fails or isn't enabled, fallback to VS Code native commands
+            await this._fileAcceptHandler();
             await this._terminalAcceptHandler();
 
         } catch (e) {

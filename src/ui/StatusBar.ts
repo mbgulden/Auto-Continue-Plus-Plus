@@ -4,9 +4,7 @@ import { ContextTracker } from '../engine/ContextTracker';
 
 export class StatusBar implements vscode.Disposable {
     private _statusBarItem: vscode.StatusBarItem;
-    private _dashboardItem: vscode.StatusBarItem;
-    private _swarmItem: vscode.StatusBarItem;
-    private _megapromptItem: vscode.StatusBarItem;
+    private _orchestrationHubItem: vscode.StatusBarItem;
     private _settingsItem: vscode.StatusBarItem;
     private _cdpItem: vscode.StatusBarItem;
     private _stateManager: StateManager;
@@ -21,23 +19,11 @@ export class StatusBar implements vscode.Disposable {
         this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this._statusBarItem.command = 'auto-continue.toggle';
 
-        // Lineage
-        this._dashboardItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
-        this._dashboardItem.command = 'auto-continue.dashboard';
-        this._dashboardItem.text = `$(graph) Lineage`;
-        this._dashboardItem.tooltip = 'Open Auto-Continue Context Lineage Dashboard';
-
-        // Agents Pro (Swarm Manager)
-        this._swarmItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 98);
-        this._swarmItem.command = 'auto-continue.swarm.spawnDelegates';
-        this._swarmItem.text = `$(organization) Agents Pro`;
-        this._swarmItem.tooltip = 'Open Agents Pro (Swarm Manager)';
-
-        // Megaprompt
-        this._megapromptItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
-        this._megapromptItem.command = 'auto-continue.megaprompt';
-        this._megapromptItem.text = `$(sparkle) Megaprompt`;
-        this._megapromptItem.tooltip = 'Launch Megaprompt Builder';
+        // Orchestration Hub
+        this._orchestrationHubItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+        this._orchestrationHubItem.command = 'auto-continue.openOrchestrationHub';
+        this._orchestrationHubItem.text = `$(graph) Orchestration Hub`;
+        this._orchestrationHubItem.tooltip = 'Open Swarm Commander Dashboard';
 
         // Settings
         this._settingsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 96);
@@ -51,9 +37,7 @@ export class StatusBar implements vscode.Disposable {
 
         context.subscriptions.push(
             this._statusBarItem, 
-            this._dashboardItem, 
-            this._swarmItem, 
-            this._megapromptItem,
+            this._orchestrationHubItem, 
             this._settingsItem, 
             this._cdpItem
         );
@@ -116,7 +100,7 @@ export class StatusBar implements vscode.Disposable {
                     this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.focusBackground');
                 }
 
-                text = `${icon} Msg/Ctx: ${healthPct}% | ${text}`;
+                text = `${icon} ${text}`;
             } else {
                 this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.focusBackground');
             }
@@ -131,9 +115,7 @@ export class StatusBar implements vscode.Disposable {
         }
 
         this._statusBarItem.show();
-        this._dashboardItem.show();
-        this._swarmItem.show();
-        this._megapromptItem.show();
+        this._orchestrationHubItem.show();
         this._settingsItem.show();
         this._cdpItem.show();
     }
@@ -143,9 +125,7 @@ export class StatusBar implements vscode.Disposable {
             this._contextHealthDisposable.dispose();
         }
         this._statusBarItem.dispose();
-        this._dashboardItem.dispose();
-        this._swarmItem.dispose();
-        this._megapromptItem.dispose();
+        this._orchestrationHubItem.dispose();
         this._settingsItem.dispose();
         this._cdpItem.dispose();
     }

@@ -32,6 +32,7 @@ import { registerForceSyncCommand } from './commands/ForceSyncCommand';
 import { registerSpawnSwarmCommand } from './commands/SpawnSwarmCommand';
 import { registerEnableCDPCommand } from './commands/EnableCDPCommand';
 import { registerCreateShortcutCommand } from './commands/CreateShortcutCommand';
+import { registerRAMFlushCommand } from './commands/RAMFlushCommand';
 
 /**
  * Extension entry point.
@@ -236,6 +237,12 @@ export function activate(context: vscode.ExtensionContext) {
     const spawnSwarmCommand = registerSpawnSwarmCommand(context, swarmOrchestrator, stateManager, boltOnRegistry, budgetManager);
     const enableCDPCommand = registerEnableCDPCommand(context, cdpHandler);
     const createShortcutCommand = registerCreateShortcutCommand();
+    const ramFlushCommand = registerRAMFlushCommand(context);
+    
+    // Orchestration Hub URL Opener
+    const openOrchestrationHubCommand = vscode.commands.registerCommand('auto-continue.openOrchestrationHub', () => {
+        vscode.env.openExternal(vscode.Uri.parse('http://localhost:5173'));
+    });
 
     context.subscriptions.push(
         toggleCommand,
@@ -245,6 +252,8 @@ export function activate(context: vscode.ExtensionContext) {
         spawnSwarmCommand,
         enableCDPCommand,
         createShortcutCommand,
+        ramFlushCommand,
+        openOrchestrationHubCommand,
         statusBar,
         contextTracker,
         { dispose: () => lockManager.dispose() }
@@ -282,6 +291,39 @@ export function activate(context: vscode.ExtensionContext) {
             }, SYNC_INTERVAL_MS);
 
             context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
+            
+            // Background Auto-Startup Installation Prompt
+            const startupFolder = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+            const vbsPath = path.join(startupFolder, 'Start-SwarmCommander.vbs');
+            if (!fs.existsSync(vbsPath)) {
+                vscode.window.showInformationMessage(
+                    "Antigravity Orchestration Hub: Do you want to automatically start the background Supervisor Daemon and React Dashboard on Windows Logon? (Required for full automation)",
+                    "Yes, Install", "Later"
+                ).then(selection => {
+                    if (selection === "Yes, Install") {
+                        const scriptPath = path.join(context.extensionPath, '.agents', 'skills', 'swarm_orchestrator', 'Install-DashboardStartup.ps1');
+                        cp.exec(`powershell.exe -ExecutionPolicy Bypass -File "${scriptPath}"`, (err, stdout, stderr) => {
+                            if (err) {
+                                vscode.window.showErrorMessage(`Failed to install Auto-Startup: ${err.message}`);
+                            } else {
+                                if (fs.existsSync(vbsPath)) {
+                                    vscode.window.showInformationMessage("Success! The Antigravity Supervisor Daemon auto-startup was installed correctly.");
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Automatic 5-minute CDP Activity Check
+            setTimeout(async () => {
+                const isActive = await cdpHandler.isCDPAvailable();
+                if (isActive) {
+                    vscode.window.showInformationMessage("Antigravity Diagnostic: CDP-based DOM Scraping is Active and Connected.");
+                } else {
+                    vscode.window.showWarningMessage("Antigravity Diagnostic: CDP is currently NOT active. Ensure you opened Antigravity with the `--remote-debugging-port=9000` flag.");
+                }
+            }, 5 * 60 * 1000); // 5 minutes
         }
     });
 

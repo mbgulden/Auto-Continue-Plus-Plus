@@ -2,7 +2,7 @@
     "name": "antigravity-orchestration-hub",
     "displayName": "Antigravity Orchestration Hub",
     "description": "The central Hub plugin for the Multi-Agent Antigravity ecosystem.",
-    "version": "1.1.45",
+    "version": "1.1.51",
     "publisher": "mbgulden",
     "icon": "assets/icon.png",
     "repository": {
@@ -133,6 +133,7 @@
         "publish:vsce": "npx @vscode/vsce publish",
         "publish:ovsx": "npx ovsx publish",
         "deploy": "npm run package && git add . && node -e \"require('child_process').execSync('git commit -m \\\"Automated deployment build v' + require('./package.json').version + ' - See CHANGELOG.md\\\"', {stdio:'inherit'})\" && git push && npm run publish:vsce && npm run publish:ovsx",
+        "dev:mode": "powershell -ExecutionPolicy Bypass -File .\\dev_mode.ps1",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "dependencies": {

@@ -244,7 +244,9 @@ export function activate(context: vscode.ExtensionContext) {
     
     // Orchestration Hub URL Opener
     const openOrchestrationHubCommand = vscode.commands.registerCommand('auto-continue.openOrchestrationHub', () => {
-        vscode.env.openExternal(vscode.Uri.parse('http://localhost:5173'));
+        const isDev = context.extensionMode === vscode.ExtensionMode.Development;
+        const port = isDev ? 5174 : 5173;
+        vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${port}`));
     });
 
     context.subscriptions.push(
@@ -295,6 +297,23 @@ export function activate(context: vscode.ExtensionContext) {
 
             context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
             
+            // Automatic Dependency Checker for the React Dashboard
+            const dashboardDir = path.join(context.extensionPath, 'commander-dashboard');
+            const nodeModulesDir = path.join(dashboardDir, 'node_modules');
+            if (!fs.existsSync(nodeModulesDir)) {
+                vscode.window.showWarningMessage(
+                    "Antigravity Hub: The React Swarm Dashboard is missing its Node.js dependencies. Do you want to automatically install them now?",
+                    "Install Dependencies", "Cancel"
+                ).then(selection => {
+                    if (selection === "Install Dependencies") {
+                        const term = vscode.window.createTerminal("Antigravity Dashboard Setup");
+                        term.show();
+                        term.sendText(`cd "${dashboardDir}"`);
+                        term.sendText("npm install");
+                    }
+                });
+            }
+
             // Background Auto-Startup Installation Prompt
             const startupFolder = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
             const vbsPath = path.join(startupFolder, 'Start-SwarmCommander.vbs');
@@ -304,7 +323,7 @@ export function activate(context: vscode.ExtensionContext) {
                     "Yes, Install", "Later"
                 ).then(selection => {
                     if (selection === "Yes, Install") {
-                        const workspaceDir = "C:\\Users\\mbgul\\Dropbox\\Workshop\\Antigravity Orchestration Hub";
+                        const workspaceDir = context.extensionPath;
                         const vbsContent = `Set objShell = CreateObject("WScript.Shell")
 objShell.Run "cmd /c cd /d ""${workspaceDir}\\.agents\\skills\\swarm_orchestrator"" && python supervisor_daemon.py", 0, False
 objShell.Run "cmd /c cd /d ""${workspaceDir}\\commander-dashboard"" && npm run dev", 0, False`;

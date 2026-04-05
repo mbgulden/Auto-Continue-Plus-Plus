@@ -12,6 +12,7 @@ import { SwarmPlanner } from './SwarmPlanner';
 import { HeadlessExecutor } from './HeadlessExecutor';
 import { LocalExecutor } from './LocalExecutor';
 import { UiQueueProcessor } from './UiQueueProcessor';
+import { JulesExecutor } from './JulesExecutor';
 
 export class SwarmOrchestrator {
     private _contractManager: ContractManager;
@@ -20,6 +21,7 @@ export class SwarmOrchestrator {
     private _headlessExecutor: HeadlessExecutor;
     private _localExecutor: LocalExecutor;
     private _uiProcessor: UiQueueProcessor;
+    private _julesExecutor: JulesExecutor;
 
     constructor(
         handoffProtocol: HandoffProtocol,
@@ -36,14 +38,28 @@ export class SwarmOrchestrator {
         this._planner = new SwarmPlanner();
         this._headlessExecutor = new HeadlessExecutor(contractManager, boltOnRegistry, budgetManager, zeroTrustValidator);
         this._localExecutor = new LocalExecutor(contractManager, budgetManager);
+        this._julesExecutor = new JulesExecutor(contractManager, budgetManager);
         this._uiProcessor = new UiQueueProcessor(handoffProtocol, contractManager, budgetManager);
     }
 
     /**
      * Accepts a user's megaprompt and returns the parsed AgentContracts for UI review.
      */
-    public async decomposeMegaprompt(megaprompt: string): Promise<AgentContract[]> {
-        return this._planner.decomposeMegaprompt(megaprompt);
+    public async decomposeMegaprompt(megaprompt: string, useJules: boolean = false): Promise<AgentContract[]> {
+        return this._planner.decomposeMegaprompt(megaprompt, useJules);
+    }
+
+    /**
+     * Instantly decomposes and launches a Megaprompt completely headless from the background Queue.
+     */
+    public async dispatchHeadlessMegaprompt(megaprompt: string, useJules: boolean = false): Promise<void> {
+        vscode.window.showInformationMessage("Antigravity Swarm: Received Dashboard Megaprompt. Decomposing background plan...");
+        try {
+            const contracts = await this.decomposeMegaprompt(megaprompt, useJules);
+            await this.spawnDelegatesFromContracts(contracts);
+        } catch (e: any) {
+            vscode.window.showErrorMessage(`Swarm Headless Dispatch Failed: ${e.message}`);
+        }
     }
 
     /**
@@ -58,9 +74,10 @@ export class SwarmOrchestrator {
         const antigravityQueue = contracts.filter(c => c.targetHead === 'Antigravity UI');
         const headlessSwarm = contracts.filter(c => c.targetHead === 'Headless API');
         const localSwarm = contracts.filter(c => c.targetHead === 'Local AI');
+        const julesSwarm = contracts.filter(c => c.targetHead === 'GitHub Jules');
 
-        // 1. Process Headless & Local AI concurrently in the background (fire and forget)
-        for (const contract of [...headlessSwarm, ...localSwarm]) {
+        // 1. Process Headless, Local AI, & Jules concurrently in the background (fire and forget)
+        for (const contract of [...headlessSwarm, ...localSwarm, ...julesSwarm]) {
             this._budgetManager.initializeThread(
                 contract.threadId, 
                 contract.role, 
@@ -72,14 +89,18 @@ export class SwarmOrchestrator {
             this._contractManager.createContract(contract);
 
             if (contract.targetHead === 'Headless API') {
-                this._headlessExecutor.execute(contract).catch(e => {
+                this._headlessExecutor.execute(contract).catch((e: any) => {
                     console.error(`[Headless API] Error in thread ${contract.threadId}:`, e);
                     vscode.window.showErrorMessage(`[Headless API Error] ${contract.role}: ${e.message}`);
                 });
             } else if (contract.targetHead === 'Local AI') {
-                this._localExecutor.execute(contract).catch(e => {
+                this._localExecutor.execute(contract).catch((e: any) => {
                     console.error(`[Local AI] Error in thread ${contract.threadId}:`, e);
                     vscode.window.showErrorMessage(`[Local AI Error] ${contract.role}: ${e.message}`);
+                });
+            } else if (contract.targetHead === 'GitHub Jules') {
+                this._julesExecutor.execute(contract).catch((e: any) => {
+                    console.error(`[GitHub Jules] Error in thread ${contract.threadId}:`, e);
                 });
             }
         }

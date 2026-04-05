@@ -58,6 +58,10 @@ def init_database() -> None:
         """CREATE TABLE IF NOT EXISTS mutex_locks
         (filepath TEXT PRIMARY KEY, locked_by TEXT, sync_state TEXT)"""
     )
+    c.execute(
+        """CREATE TABLE IF NOT EXISTS pending_prompts
+        (id INTEGER PRIMARY KEY AUTOINCREMENT, prompt TEXT, use_jules BOOLEAN)"""
+    )
 
     # Seed 6 Sovereign Nodes
     agents = [
@@ -256,11 +260,31 @@ def dispatch_megaprompt():
         "VALUES (?, ?, ?, ?)",
         ("TSK-NEW", "Initialize Master Plan", "in-progress", "Antigravity"),
     )
+    execute_db(
+        "INSERT INTO pending_prompts (prompt, use_jules) VALUES (?, ?)",
+        (prompt, use_jules)
+    )
 
     # Record usage against the active model
     record_usage(active_model, tokens=len(prompt))
 
     return jsonify({"status": "dispatched", "model": active_model}), 200
+
+@app.route("/api/dispatch/queue", methods=["GET"])
+def dispatch_queue():
+    """Pop the oldest pending Megaprompt for the TS IDE engine."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM pending_prompts ORDER BY id ASC LIMIT 1")
+    row = c.fetchone()
+    if row:
+        c.execute("DELETE FROM pending_prompts WHERE id = ?", (row["id"],))
+        conn.commit()
+        conn.close()
+        return jsonify(dict(row)), 200
+    conn.close()
+    return jsonify({}), 200
 
 @app.route("/api/cdp/force-yield", methods=["POST"])
 def force_yield():
@@ -321,4 +345,4 @@ if __name__ == "__main__":
 
     threading.Thread(target=start_watchdog, daemon=True).start()
 
-    app.run(port=5001, debug=False, use_reloader=False)
+    app.run(port=5002, debug=False, use_reloader=False)

@@ -13,7 +13,7 @@ export function registerSpawnSwarmCommand(
     boltOnRegistry: BoltOnRegistry,
     budgetManager: BudgetManager
 ): vscode.Disposable {
-    return vscode.commands.registerCommand('auto-continue.swarm.spawnDelegates', async () => {
+    const spawnCmd = vscode.commands.registerCommand('auto-continue.swarm.spawnDelegates', async () => {
         const agreed = await checkGlobalTOS(context);
         if (!agreed) {
             vscode.window.showErrorMessage('You must agree to the Terms of Service to use the Swarm.');
@@ -21,4 +21,14 @@ export function registerSpawnSwarmCommand(
         }
         SwarmWebview.createOrShow(swarmOrchestrator, stateManager, boltOnRegistry, budgetManager);
     });
+
+    const headlessCmd = vscode.commands.registerCommand('auto-continue.swarm.dispatchHeadless', async (prompt: string, useJules: boolean = false) => {
+        const agreed = await checkGlobalTOS(context);
+        if (!agreed) return;
+        if (prompt) {
+            await swarmOrchestrator.dispatchHeadlessMegaprompt(prompt, useJules);
+        }
+    });
+
+    return vscode.Disposable.from(spawnCmd, headlessCmd);
 }

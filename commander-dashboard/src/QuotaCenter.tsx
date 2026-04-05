@@ -53,6 +53,9 @@ function formatCountdown(totalSeconds: number): string {
   return `${h}h ${m}m`;
 }
 
+const isReactDev = window.location.port === '5174';
+const API_BASE = `http://localhost:${isReactDev ? 5002 : 5001}`;
+
 /**
  * QuotaCenter — Real-time dashboard panel showing Google AI Ultra
  * usage across all models, with auto-throttle cascade status,
@@ -66,12 +69,12 @@ export default function QuotaCenter() {
   useEffect(() => {
     const fetchUsage = async () => {
       try {
-        const res = await fetch('http://localhost:5001/api/usage', { cache: 'no-store' });
+        const res = await fetch(`${API_BASE}/api/usage`, { cache: 'no-store' });
         const data: UsageResponse = await res.json();
         setUsage(data);
         setCountdown(data.reset_seconds);
 
-        const histRes = await fetch('http://localhost:5001/api/usage/throttle-history', { cache: 'no-store' });
+        const histRes = await fetch(`${API_BASE}/api/usage/throttle-history`, { cache: 'no-store' });
         setHistory(await histRes.json());
       } catch {
         /* Supervisor offline — silently degrade */

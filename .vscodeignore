@@ -5,7 +5,6 @@ src/**
 .yarnrc
 **/*.ts
 **/*.map
-.agents/**
 
 .instructions/**
 ovsx_publish_output.txt
@@ -20,3 +19,4 @@ esbuild.config.mjs
 docs/**
 tests/**
 commander-dashboard/node_modules/**
+Example Repositories/**

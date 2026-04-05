@@ -56,7 +56,9 @@ export class PollingEngine {
 
         try {
             // Dynamic Throttle Polling connected to /api/usage
-            const response = await fetch('http://localhost:5001/api/usage');
+            const isDev = this._context.extensionMode === vscode.ExtensionMode.Development;
+            const pythonPort = isDev ? 5002 : 5001;
+            const response = await fetch(`http://localhost:${pythonPort}/api/usage`);
             if (response.ok) {
                 const data = await response.json();
                 const activeModel = data.active_model;
@@ -143,13 +145,32 @@ export class PollingEngine {
             if (now - this._lastTelemetryPing > 30000) {
                 this._lastTelemetryPing = now;
                 try {
-                    fetch('http://localhost:5001/api/telemetry', {
+                    const isDev = this._context.extensionMode === vscode.ExtensionMode.Development;
+                    const pythonPort = isDev ? 5002 : 5001;
+                    fetch(`http://localhost:${pythonPort}/api/telemetry`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ msg: 'CDP Polling Engine Active', level: 'info' })
                     }).catch(() => { /* silent fail if supervisor down */ });
                 } catch (e) { }
             }
+
+            // 0.5 Check the React Dashboard Megaprompt Dispatch Queue
+            try {
+                const isDev = this._context.extensionMode === vscode.ExtensionMode.Development;
+                const pythonPort = isDev ? 5002 : 5001;
+                const queueRes = await fetch(`http://localhost:${pythonPort}/api/dispatch/queue`);
+                if (queueRes.ok) {
+                    const queueData = await queueRes.json();
+                    if (queueData && queueData.prompt) {
+                        try {
+                            vscode.commands.executeCommand('auto-continue.swarm.dispatchHeadless', queueData.prompt, !!queueData.use_jules);
+                        } catch (e) {
+                            console.error("Failed to execute headless payload", e);
+                        }
+                    }
+                }
+            } catch (e) { /* ignore disconnected daemon */ }
 
             // 1. & 2. Try CDP execution first (DOM Scraping payload handles all types of accept logic)
             // It runs synchronously inside the webview without focus requirements.

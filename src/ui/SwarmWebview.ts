@@ -220,6 +220,7 @@ export class SwarmWebview {
                         <option value="Antigravity UI" ${safeTargetHead === 'Antigravity UI' ? 'selected' : ''}>Antigravity IDE Sidebar (Queued)</option>
                         <option value="Headless API" ${safeTargetHead === 'Headless API' ? 'selected' : ''}>Headless API Swarm (Parallel)</option>
                         <option value="Local AI" ${safeTargetHead === 'Local AI' ? 'selected' : ''}>Local AI Swarm (Validator/Refactor)</option>
+                        <option value="GitHub Jules" ${safeTargetHead === 'GitHub Jules' ? 'selected' : ''}>GitHub Jules (Remote Review/PR)</option>
                     </select>
 
                     <div style="display: flex; gap: 10px; margin-top: 10px;">

@@ -39,6 +39,9 @@ interface MutexRecord {
   sync_state: string;
 }
 
+const isReactDev = window.location.port === '5174';
+const API_BASE = `http://localhost:${isReactDev ? 5002 : 5001}`;
+
 function App() {
   const [megaprompt, setMegaprompt] = useState('');
   const [useJules, setUseJules] = useState(true);
@@ -56,16 +59,16 @@ function App() {
     const syncDashboard = async () => {
       try {
         const fetchConfig = { cache: "no-store" as RequestCache };
-        const agentRes = await fetch('http://localhost:5001/api/agents', fetchConfig);
+        const agentRes = await fetch(`${API_BASE}/api/agents`, fetchConfig);
         setAgents(await agentRes.json());
         
-        const taskRes = await fetch('http://localhost:5001/api/tasks', fetchConfig);
+        const taskRes = await fetch(`${API_BASE}/api/tasks`, fetchConfig);
         setTasks(await taskRes.json());
         
-        const teleRes = await fetch('http://localhost:5001/api/telemetry', fetchConfig);
+        const teleRes = await fetch(`${API_BASE}/api/telemetry`, fetchConfig);
         setTelemetry(await teleRes.json());
         
-        const mutRes = await fetch('http://localhost:5001/api/mutex', fetchConfig);
+        const mutRes = await fetch(`${API_BASE}/api/mutex`, fetchConfig);
         setMutexes(await mutRes.json());
 
         setIsBackendLive(true);
@@ -83,7 +86,7 @@ function App() {
     if (!megaprompt.trim()) return;
     setIsDeploying(true);
     try {
-      await fetch('http://localhost:5001/api/dispatch', {
+      await fetch(`${API_BASE}/api/dispatch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: megaprompt, use_jules: useJules })

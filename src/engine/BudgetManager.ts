@@ -4,7 +4,7 @@ import { StateManager } from '../state/StateManager';
 export interface UsageTelemetry {
     threadId: string;
     agentRole: string;
-    targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI';
+    targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI' | 'GitHub Jules';
     cloudTokensUsed: number;
     localContextFilled: number;
     localContextMax: number;
@@ -33,7 +33,7 @@ export class BudgetManager {
     public initializeThread(
         threadId: string, 
         agentRole: string, 
-        targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI', 
+        targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI' | 'GitHub Jules', 
         budgetLimit: number | null, 
         localContextMax: number
     ): void {

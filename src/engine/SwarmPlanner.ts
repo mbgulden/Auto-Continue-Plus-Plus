@@ -3,9 +3,9 @@ import * as https from 'https';
 import { AgentContract } from './ContractManager';
 
 export class SwarmPlanner {
-    public async decomposeMegaprompt(megaprompt: string): Promise<AgentContract[]> {
+    public async decomposeMegaprompt(megaprompt: string, useJules: boolean = false): Promise<AgentContract[]> {
         vscode.window.showInformationMessage('Auto-Continue Swarm: Analyzing Megaprompt (auto-selecting best Gemini 3 model)...');
-        const tasks = await this._decomposePromptWithGemini(megaprompt);
+        const tasks = await this._decomposePromptWithGemini(megaprompt, useJules);
 
         if (tasks.length === 0) {
             vscode.window.showWarningMessage('Auto-Continue Swarm: Could not parse delegates. Please check your API key or prompt.');
@@ -27,7 +27,7 @@ export class SwarmPlanner {
         });
     }
 
-    private async _decomposePromptWithGemini(prompt: string): Promise<Array<{ role: string, description: string, allowedDirectories: string[], readOnlyDirectories: string[], targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI' }>> {
+    private async _decomposePromptWithGemini(prompt: string, useJules: boolean): Promise<Array<{ role: string, description: string, allowedDirectories: string[], readOnlyDirectories: string[], targetHead: 'Antigravity UI' | 'Headless API' | 'Local AI' | 'GitHub Jules' }>> {
         const config = vscode.workspace.getConfiguration('autoContinue');
         const apiKey = config.get<string>('geminiApiKey');
 
@@ -46,12 +46,14 @@ The JSON schema MUST be an array of objects matching this exact structure:
     "description": "string (Detailed, exhaustive instructions of what exactly this agent should do. MUST include ALL context from the prompt.)",
     "allowedDirectories": ["string (e.g., 'src/ui', 'styles/')"],
     "readOnlyDirectories": ["string (e.g., 'src/api/types.ts')"],
-    "targetHead": "string (MUST BE EXACTLY ONE OF: 'Antigravity UI' OR 'Headless API' OR 'Local AI')"
+    "targetHead": "string (MUST BE EXACTLY ONE OF: 'Antigravity UI' OR 'Headless API' OR 'Local AI' OR 'GitHub Jules')"
   }
 ]
 - Use 'Antigravity UI' if the task requires deep codebase understanding or complex planning.
 - Use 'Headless API' for parallel code generation or independent testing.
-- Use 'Local AI' for fast, simple tasks like syntax checks, formatting, or simple refactors.`;
+- Use 'Local AI' for fast, simple tasks like syntax checks, formatting, or simple refactors.
+${useJules ? "- HIGH PRIORITY: The user specifically requested GitHub Jules! You MUST map any code-review, large refactoring, or remote-cloud tasks to 'GitHub Jules'." : ""}
+`;
 
         const payload = JSON.stringify({
             system_instruction: {

@@ -82,7 +82,9 @@ export class FileReaderWriterBoltOn implements IBoltOn {
 
         try {
             if (intent === 'read_file') {
-                if (!fs.existsSync(absolutePath)) {
+                try {
+                    await fs.promises.access(absolutePath, fs.constants.R_OK);
+                } catch {
                     return {
                         success: false,
                         message: `File not found: ${filePath}`,
@@ -90,7 +92,7 @@ export class FileReaderWriterBoltOn implements IBoltOn {
                     };
                 }
 
-                const content = fs.readFileSync(absolutePath, 'utf8');
+                const content = await fs.promises.readFile(absolutePath, 'utf8');
                 return {
                     success: true,
                     message: `Successfully read file: ${filePath}`,
@@ -120,11 +122,13 @@ export class FileReaderWriterBoltOn implements IBoltOn {
                 try {
                     // Ensure directory exists
                     const dir = path.dirname(absolutePath);
-                    if (!fs.existsSync(dir)) {
-                        fs.mkdirSync(dir, { recursive: true });
+                    try {
+                        await fs.promises.access(dir, fs.constants.W_OK);
+                    } catch {
+                        await fs.promises.mkdir(dir, { recursive: true });
                     }
 
-                    fs.writeFileSync(absolutePath, newContent, 'utf8');
+                    await fs.promises.writeFile(absolutePath, newContent, 'utf8');
 
                     return {
                         success: true,
